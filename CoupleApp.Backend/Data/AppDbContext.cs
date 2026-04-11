@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<GameTask> GameTasks => Set<GameTask>();
+    public DbSet<GalleryItem> GalleryItems => Set<GalleryItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -68,6 +69,22 @@ public class AppDbContext : DbContext
             entity.HasOne(g => g.AssignedTo)
                   .WithMany(u => u.GameTasks)
                   .HasForeignKey(g => g.AssignedToUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── GalleryItem ───────────────────────────────────────────────────
+        modelBuilder.Entity<GalleryItem>(entity =>
+        {
+            entity.HasKey(g => g.Id);
+
+            entity.HasOne(g => g.Uploader)
+                  .WithMany()
+                  .HasForeignKey(g => g.UploaderId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(g => g.Receiver)
+                  .WithMany()
+                  .HasForeignKey(g => g.ReceiverId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
     }

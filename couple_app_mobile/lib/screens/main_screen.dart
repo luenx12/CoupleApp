@@ -4,6 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/domain/auth_notifier.dart';
 import '../features/chat/data/signalr_service.dart';
+import '../features/chat/presentation/chat_screen.dart';
+import '../features/location/presentation/location_map_screen.dart';
+import '../features/location/domain/location_notifier.dart';
+import '../features/gallery/presentation/gallery_screen.dart';
+import '../features/vibe/domain/vibe_notifier.dart';
+import '../features/vibe/presentation/vibe_dashboard_screen.dart';
+import '../features/games/presentation/games_screen.dart';
+import 'package:lottie/lottie.dart';
 
 final activeTabProvider = StateProvider<int>((_) => 0);
 
@@ -28,6 +36,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   static const _pages = [
+    _VibePage(),
     _ChatPage(),
     _MapPage(),
     _GalleryPage(),
@@ -38,23 +47,46 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   Widget build(BuildContext context) {
     final activeTab = ref.watch(activeTabProvider);
     final hubStatus = ref.watch(hubStatusProvider);
+    final vibeState = ref.watch(vibeNotifierProvider);
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _TopBar(hubStatus: hubStatus),
-              Expanded(child: _pages[activeTab]),
-            ],
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  _TopBar(hubStatus: hubStatus),
+                  Expanded(child: _pages[activeTab]),
+                ],
+              ),
+            ),
           ),
-        ),
+          
+          // Lottie Overlay for Vibes
+          if (vibeState.currentVibe != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Lottie.network(
+                  'https://lottie.host/e2ccda68-da7d-47be-bba2-cc84a44d8b94/I0QjVzQdM2.json', // Sample Love Heart explosion URL
+                  fit: BoxFit.cover,
+                  repeat: false,
+                  onLoaded: (composition) {
+                    Future.delayed(composition.duration, () {
+                      if (mounted) ref.read(vibeNotifierProvider.notifier).clearVibe();
+                    });
+                  },
+                ),
+              ),
+            ),
+        ],
       ),
       bottomNavigationBar: _BottomNav(activeTab: activeTab),
     );
   }
 }
+
 
 // ── Top Bar ────────────────────────────────────────────────────────────────
 class _TopBar extends StatelessWidget {
@@ -139,6 +171,11 @@ class _BottomNav extends ConsumerWidget {
         height: 68,
         destinations: const [
           NavigationDestination(
+            icon:         Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard_rounded),
+            label:        'Günlük',
+          ),
+          NavigationDestination(
             icon:         Icon(Icons.chat_bubble_outline_rounded),
             selectedIcon: Icon(Icons.chat_bubble_rounded),
             label:        'Sohbet',
@@ -165,66 +202,38 @@ class _BottomNav extends ConsumerWidget {
 }
 
 // ── Placeholder Pages ──────────────────────────────────────────────────────
-class _ChatPage    extends StatelessWidget { const _ChatPage();    @override Widget build(BuildContext ctx) => _PlaceholderPage(icon: Icons.chat_bubble_rounded,    title: 'Sohbet',  subtitle: 'Uçtan uca şifrelenmiş mesajlar', gradient: const [Color(0xFFE91E8C), Color(0xFF7C3AED)]); }
-class _MapPage     extends StatelessWidget { const _MapPage();     @override Widget build(BuildContext ctx) => _PlaceholderPage(icon: Icons.location_on_rounded,     title: 'Harita',  subtitle: 'Partnerinizin anlık konumu',     gradient: const [Color(0xFF06B6D4), Color(0xFF6366F1)]); }
-class _GalleryPage extends StatelessWidget { const _GalleryPage(); @override Widget build(BuildContext ctx) => _PlaceholderPage(icon: Icons.photo_album_rounded,     title: 'Galeri',  subtitle: 'Gizli anılarınız',               gradient: const [Color(0xFFF59E0B), Color(0xFFEC4899)]); }
-class _GamesPage   extends StatelessWidget { const _GamesPage();   @override Widget build(BuildContext ctx) => _PlaceholderPage(icon: Icons.extension_rounded,       title: 'Oyunlar', subtitle: 'Görevler ve mini oyunlar',        gradient: const [Color(0xFF10B981), Color(0xFF3B82F6)]); }
-
-class _PlaceholderPage extends StatelessWidget {
-  const _PlaceholderPage({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.gradient,
-  });
-  final IconData icon;
-  final String title, subtitle;
-  final List<Color> gradient;
-
+class _ChatPage extends StatelessWidget {
+  const _ChatPage();
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 100, height: 100,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradient),
-              shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: gradient.first.withAlpha(100), blurRadius: 30, spreadRadius: 5)],
-            ),
-            child: Icon(icon, size: 48, color: Colors.white),
-          ).animate()
-           .scale(begin: const Offset(0.5, 0.5), duration: 500.ms, curve: Curves.elasticOut)
-           .fadeIn(duration: 400.ms),
+  Widget build(BuildContext context) => const ChatScreen();
+}
 
-          const SizedBox(height: 24),
-
-          Text(title,
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w800, color: AppColors.onSurface),
-          ).animate().slideY(begin: 0.3, duration: 400.ms, delay: 100.ms).fadeIn(),
-
-          const SizedBox(height: 8),
-
-          Text(subtitle,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.onSurfaceMuted),
-          ).animate().slideY(begin: 0.3, duration: 400.ms, delay: 200.ms).fadeIn(),
-
-          const SizedBox(height: 40),
-
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradient),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text('Yakında…',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-          ).animate().fadeIn(delay: 300.ms),
-        ],
-      ),
-    );
+class _MapPage extends ConsumerWidget {
+  const _MapPage();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Initialize location notifier (registers SignalR callbacks)
+    ref.watch(locationNotifierProvider);
+    return const LocationMapScreen();
   }
 }
+
+class _GalleryPage extends StatelessWidget {
+  const _GalleryPage();
+  @override
+  Widget build(BuildContext context) => const GalleryScreen();
+}
+
+class _VibePage extends StatelessWidget {
+  const _VibePage();
+  @override
+  Widget build(BuildContext context) => const VibeDashboardScreen();
+}
+
+class _GamesPage extends StatelessWidget {
+  const _GamesPage();
+  @override
+  Widget build(BuildContext context) => const GamesScreen();
+}
+
+// End of Main Screen pages

@@ -159,4 +159,17 @@ class MediaStorageService {
     final path = await pathFor(fileId);
     return File(path).existsSync();
   }
+
+  /// Zaten şifreli olan bytes'ı direkt diske yaz (sunucudan indirilen .aes)
+  /// Bu bytes PLAINTEXT değil — şifreli formatta geliyor.
+  Future<String> saveRawEncryptedBytes({
+    required Uint8List bytes,
+    required String fileId,
+  }) async {
+    final dir  = await _mediaDir;
+    final path = '${dir.path}/$fileId.aes';
+    await File(path).writeAsBytes(bytes, flush: true);
+    return path;
+  }
 }
+

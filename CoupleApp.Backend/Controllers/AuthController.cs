@@ -89,6 +89,43 @@ public class AuthController : ControllerBase
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    // ── GET /api/Auth/me ────────────────────────────────────────────────
+    [HttpGet("me")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    public async Task<IActionResult> Me()
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? throw new UnauthorizedAccessException());
+        var user = await _db.Users.FindAsync(userId);
+        if (user is null) return NotFound();
+        return Ok(new { user.Id, user.Username, user.PublicKey });
+    }
+
+    // ── GET /api/Auth/partner ────────────────────────────────────────────
+    /// <summary>
+    /// Returns the partner (the only other user in the DB for this 2-person app).
+    /// In production, a proper pairing table should be used.
+    /// </summary>
+    [HttpGet("partner")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    public async Task<IActionResult> GetPartner()
+    {
+        var myId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? throw new UnauthorizedAccessException());
+
+        var partner = await _db.Users
+            .Where(u => u.Id != myId)
+            .OrderBy(u => u.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (partner is null)
+            return NotFound("No partner found. Register the second user first.");
+
+        return Ok(new { partner.Id, partner.Username, partner.PublicKey });
+    }
 }
 
 public record RegisterDto(string Username, string Password, string? PublicKey);

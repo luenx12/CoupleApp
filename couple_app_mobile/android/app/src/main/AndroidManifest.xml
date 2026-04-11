@@ -4,6 +4,13 @@
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <!-- Internet for API & SignalR -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Camera & Gallery (image_picker) -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <!-- Location (geolocator) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
         android:label="CoupleApp"
@@ -27,6 +34,10 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Google Maps API Key -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBe5KFbm12yg4LLzPrPnssBx4gaCvY137c"/>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

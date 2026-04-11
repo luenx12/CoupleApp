@@ -62,6 +62,41 @@ namespace CoupleApp.Backend.Migrations
                     b.ToTable("Activities");
                 });
 
+            modelBuilder.Entity("CoupleApp.Backend.Entities.GalleryItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LockedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MediaIdForReceiver")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("MediaIdForSender")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ReceiverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UploaderId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReceiverId");
+
+                    b.HasIndex("UploaderId");
+
+                    b.ToTable("GalleryItems");
+                });
+
             modelBuilder.Entity("CoupleApp.Backend.Entities.GameTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -142,6 +177,10 @@ namespace CoupleApp.Backend.Migrations
                     b.Property<bool>("IsRead")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("MediaId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime?>("ReadAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -209,6 +248,25 @@ namespace CoupleApp.Backend.Migrations
                         .IsRequired();
 
                     b.Navigation("CreatedBy");
+                });
+
+            modelBuilder.Entity("CoupleApp.Backend.Entities.GalleryItem", b =>
+                {
+                    b.HasOne("CoupleApp.Backend.Entities.User", "Receiver")
+                        .WithMany()
+                        .HasForeignKey("ReceiverId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CoupleApp.Backend.Entities.User", "Uploader")
+                        .WithMany()
+                        .HasForeignKey("UploaderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Receiver");
+
+                    b.Navigation("Uploader");
                 });
 
             modelBuilder.Entity("CoupleApp.Backend.Entities.GameTask", b =>

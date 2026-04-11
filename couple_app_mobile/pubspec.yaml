@@ -36,6 +36,31 @@ dependencies:
   # Encrypted media storage (app-private directory, no backup)
   path_provider: ^2.1.5
 
+  # ── Aşama 4: Chat ─────────────────────────────────────────────────────
+  # Local message database (plaintext text only, zero-leak principle for media)
+  sqflite: ^2.3.3+1
+
+  # Media picker (gallery / camera)
+  image_picker: ^1.1.2
+
+  # HTTP multipart upload for encrypted media
+  http: ^1.2.2
+
+  # Unique IDs for media files
+  uuid: ^4.5.1
+
+  # ── Aşama 5: Location ─────────────────────────────────────────────────
+  # GPS
+  geolocator: ^13.0.2
+
+  # Dark-theme map with custom pins
+  google_maps_flutter: ^2.9.0
+  lottie: ^3.3.1
+  scratcher: ^2.5.0
+  confetti: ^0.8.0
+  video_player: ^2.10.1
+
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

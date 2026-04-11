@@ -32,6 +32,13 @@ public class Message
 
     public MessageType Type { get; set; } = MessageType.Text;
 
+    /// <summary>
+    /// Server-side media ID (for encrypted image self-destruct).
+    /// Client sends DELETE /api/Media/{MediaId} after viewing.
+    /// </summary>
+    [MaxLength(100)]
+    public string? MediaId { get; set; }
+
     public bool IsDelivered { get; set; } = false;
     public bool IsRead { get; set; } = false;
     public bool IsDeleted { get; set; } = false;

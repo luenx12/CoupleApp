@@ -50,7 +50,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final isSupported = await _localAuth.isDeviceSupported();
 
       if (!canCheck && !isSupported) {
-        // Emülatörde biyometri yoksa direkt geç
         await _loadUserFromStorage();
         return true;
       }
@@ -78,6 +77,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       username:    username,
       accessToken: token,
     );
+    // Partner bilgisini arka planda yükle
+    await _fetchPartner(token);
   }
 
   Future<void> login(String username, String password) async {
@@ -96,6 +97,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId:      userId,
         username:    uname,
       );
+      // Partner bilgisini yükle
+      await _fetchPartner(token);
     } on DioException catch (e) {
       state = state.copyWith(
           errorMessage: e.response?.data?.toString() ?? 'Giriş başarısız.');
@@ -117,4 +120,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _storage.deleteAll();
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
+
+  Future<void> _fetchPartner(String? token) async {
+    if (token == null) return;
+    try {
+      final dio = Dio(BaseOptions(
+        baseUrl: AppConfig.apiUrl,
+        headers: {'Authorization': 'Bearer $token'},
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+      ));
+      final res = await dio.get('/Auth/partner');
+      final data = res.data as Map<String, dynamic>;
+      state = state.copyWith(
+        partnerId:        data['id']?.toString(),
+        partnerName:      data['username']?.toString(),
+        partnerPublicKey: data['publicKey']?.toString(),
+      );
+    } catch (_) {
+      // Partner kayıtlı değilse sessizce geç
+    }
+  }
 }
+

@@ -80,14 +80,15 @@ public class CoupleHub : Hub
         // 3. Persist (ciphertext only — Zero-Leak principle)
         var message = new Message
         {
-            SenderId          = senderId,
-            ReceiverId        = dto.ReceiverId,
-            EncryptedText     = dto.EncryptedText,
+            SenderId               = senderId,
+            ReceiverId             = dto.ReceiverId,
+            EncryptedText          = dto.EncryptedText,
             EncryptedTextForSender = dto.EncryptedTextForSender,
-            IV                = dto.IV,
-            Type              = dto.Type,
-            IsDelivered       = false,
-            SentAt            = DateTime.UtcNow
+            IV                     = dto.IV,
+            Type                   = dto.Type,
+            MediaId                = dto.MediaId,
+            IsDelivered            = false,
+            SentAt                 = DateTime.UtcNow
         };
 
         _db.Messages.Add(message);
@@ -101,6 +102,7 @@ public class CoupleHub : Hub
             EncryptedText = message.EncryptedText,
             IV            = message.IV,
             Type          = message.Type,
+            MediaId       = message.MediaId,
             SentAt        = message.SentAt
         };
 
@@ -122,6 +124,58 @@ public class CoupleHub : Hub
 
         _logger.LogInformation("Message {MessageId} sent: {SenderId} → {ReceiverId}, delivered={Delivered}",
             message.Id, senderId, dto.ReceiverId, message.IsDelivered);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Location sharing (all payloads are E2EE-encrypted by client)
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Sender asks partner: "Where are you?"  
+    /// Partner receives "LocationRequested" event with requesterId.
+    /// </summary>
+    public async Task RequestLocationAsync(Guid partnerId)
+    {
+        var requesterId  = GetUserId();
+        var connections  = _connectionManager.GetConnections(partnerId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("LocationRequested", new { RequesterId = requesterId });
+
+        _logger.LogInformation("User {RequesterId} requested location from {PartnerId}",
+            requesterId, partnerId);
+    }
+
+    /// <summary>
+    /// Partner approved and shares their encrypted GPS coordinates.
+    /// Requester receives "LocationShared" with the encrypted payload.
+    /// </summary>
+    public async Task ShareLocationAsync(Guid requesterId, string encryptedPayload)
+    {
+        var sharerId    = GetUserId();
+        var connections = _connectionManager.GetConnections(requesterId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("LocationShared", new
+                         {
+                             SharerId         = sharerId,
+                             EncryptedPayload = encryptedPayload
+                         });
+
+        _logger.LogInformation("User {SharerId} shared location with {RequesterId}",
+            sharerId, requesterId);
+    }
+
+    /// <summary>
+    /// Partner denied the location request.
+    /// </summary>
+    public async Task DenyLocationAsync(Guid requesterId)
+    {
+        var deniedById  = GetUserId();
+        var connections = _connectionManager.GetConnections(requesterId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("LocationDenied", new { DeniedById = deniedById });
     }
 
     /// <summary>
@@ -162,6 +216,59 @@ public class CoupleHub : Hub
     }
 
     // ──────────────────────────────────────────────────────────────────────
+    // Daily Vibe & Sync
+    // ──────────────────────────────────────────────────────────────────────
+
+    public async Task SyncWaterAsync(Guid partnerId, int waterCount)
+    {
+        var senderId = GetUserId();
+        var connections = _connectionManager.GetConnections(partnerId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("WaterSynced", new { SenderId = senderId, WaterCount = waterCount });
+    }
+
+    public async Task SendVibeAsync(Guid partnerId, string vibeType)
+    {
+        var senderId = GetUserId();
+        var connections = _connectionManager.GetConnections(partnerId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("VibeReceived", new { SenderId = senderId, VibeType = vibeType });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Games & Red Room
+    // ──────────────────────────────────────────────────────────────────────
+
+    public async Task SendWhoIsMoreAnswerAsync(Guid partnerId, string questionId, string answer)
+    {
+        var senderId = GetUserId();
+        var connections = _connectionManager.GetConnections(partnerId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("WhoIsMoreAnswered", new { SenderId = senderId, QuestionId = questionId, Answer = answer });
+    }
+
+    public async Task SendFlameLevelAsync(Guid partnerId, double level)
+    {
+        var senderId = GetUserId();
+        var connections = _connectionManager.GetConnections(partnerId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("FlameLevelChanged", new { SenderId = senderId, Level = level });
+    }
+
+    public async Task SendRedRoomMediaAsync(Guid partnerId, string mediaId, int timeoutSeconds)
+    {
+        var senderId = GetUserId();
+        var connections = _connectionManager.GetConnections(partnerId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("RedRoomMediaReceived", new { SenderId = senderId, MediaId = mediaId, TimeoutSeconds = timeoutSeconds });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────
 
@@ -183,15 +290,17 @@ public record SendMessageDto(
     string EncryptedText,
     string? EncryptedTextForSender,
     string? IV,
+    string? MediaId,
     MessageType Type = MessageType.Text
 );
 
 public record MessageDeliveryDto
 {
-    public Guid MessageId     { get; init; }
-    public Guid SenderId      { get; init; }
+    public Guid MessageId       { get; init; }
+    public Guid SenderId        { get; init; }
     public string EncryptedText { get; init; } = string.Empty;
-    public string? IV         { get; init; }
-    public MessageType Type   { get; init; }
-    public DateTime SentAt    { get; init; }
+    public string? IV           { get; init; }
+    public string? MediaId      { get; init; }
+    public MessageType Type     { get; init; }
+    public DateTime SentAt      { get; init; }
 }

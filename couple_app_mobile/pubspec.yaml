@@ -30,6 +30,12 @@ dependencies:
   flutter_animate: ^4.5.0
   cupertino_icons: ^1.0.8
 
+  # Zero-Leak Cryptography (RSA-2048 + AES-256-GCM Hybrid)
+  pointycastle: ^3.9.1
+
+  # Encrypted media storage (app-private directory, no backup)
+  path_provider: ^2.1.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

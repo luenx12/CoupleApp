@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 import '../../../core/config/app_config.dart';
@@ -30,8 +31,9 @@ class SignalRService {
         AppConfig.hubUrl,
         options: HttpConnectionOptions(
           accessTokenFactory: () async => accessToken,
-          transport: HttpTransportType.WebSockets,
-          skipNegotiation: true,
+          // Web'de WebSocket-only + skipNegotiation CORS hatası verir
+          transport: kIsWeb ? null : HttpTransportType.WebSockets,
+          skipNegotiation: kIsWeb ? false : true,
         ),
       )
       .withAutomaticReconnect(retryDelays: [0, 2000, 5000, 10000, 30000])

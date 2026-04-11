@@ -106,7 +106,12 @@ builder.Services.AddSwaggerGen(c =>
 //  6. CORS — development only; tighten in production
 // ════════════════════════════════════════════════════════════════════
 builder.Services.AddCors(o => o.AddPolicy("DevPolicy", p =>
-    p.WithOrigins("http://localhost:3000", "http://localhost:5173")
+    p.WithOrigins(
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:8080",   // Flutter web (debug)
+        "http://localhost:8081"    // Flutter web (alternate port)
+     )
      .AllowAnyHeader()
      .AllowAnyMethod()
      .AllowCredentials()));

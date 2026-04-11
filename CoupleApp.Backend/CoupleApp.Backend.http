@@ -1,0 +1,6 @@
+@CoupleApp.Backend_HostAddress = http://localhost:5193
+
+GET {{CoupleApp.Backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,39 @@
+name: couple_app_mobile
+description: "Zero-Leak E2EE Couple App — Flutter"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # SignalR
+  signalr_netcore: ^1.3.6
+
+  # Biometric auth
+  local_auth: ^2.3.0
+
+  # Secure storage (tokens)
+  flutter_secure_storage: ^9.2.2
+
+  # HTTP
+  dio: ^5.7.0
+
+  # UI enhancements
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.0
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

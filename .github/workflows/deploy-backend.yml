@@ -70,7 +70,7 @@ jobs:
             cd /opt/coupleapp
             cat << 'EOF' > .env
             JWT_SECRET=${{ secrets.JWT_SECRET }}
-            FCM_KEY=${{ secrets.FCM_KEY }}
+            FCM_KEY='$(echo '${{ secrets.FCM_KEY }}' | tr -d '\n')'
             SENTRY_DSN=${{ secrets.SENTRY_DSN }}
             DB_PASSWORD=${{ secrets.DB_PASSWORD }}
             DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}

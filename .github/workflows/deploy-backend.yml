@@ -13,7 +13,6 @@ on:
       - "Dockerfile"
       - ".github/workflows/deploy-backend.yml"
   workflow_dispatch:
-  ##yorum
 
 jobs:
   build-and-push:

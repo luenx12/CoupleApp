@@ -1,5 +1,5 @@
-using CoupleApp.Backend.Data;
-using CoupleApp.Backend.Entities;
+using CoupleApp.Core.Entities;
+using CoupleApp.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -33,13 +33,13 @@ public class GameTasksController : ControllerBase
         var userId = GetUserId();
         var task = new GameTask
         {
-            AssignedByUserId  = userId,
-            AssignedToUserId  = dto.AssignedToUserId,
-            Title             = dto.Title,
-            Description       = dto.Description,
-            Points            = dto.Points,
-            Difficulty        = dto.Difficulty,
-            DueDate           = dto.DueDate
+            AssignedByUserId = userId,
+            AssignedToUserId = dto.AssignedToUserId,
+            Title            = dto.Title,
+            Description      = dto.Description,
+            Points           = dto.Points,
+            Difficulty       = dto.Difficulty,
+            DueDate          = dto.DueDate
         };
         _db.GameTasks.Add(task);
         await _db.SaveChangesAsync();
@@ -53,8 +53,8 @@ public class GameTasksController : ControllerBase
         var task = await _db.GameTasks.FindAsync(id);
         if (task is null || task.AssignedToUserId != userId) return NotFound();
 
-        task.IsCompleted  = true;
-        task.CompletedAt  = DateTime.UtcNow;
+        task.IsCompleted = true;
+        task.CompletedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return Ok(task);
     }

@@ -1,0 +1,47 @@
+name: Flutter Releases Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build APK and IPA
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: couple_app_mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Build IPA
+        run: flutter build ios --release --no-codesign
+        
+      # Upload using softprops/action-gh-release to attach binaries to GitHub Tag releases
+      - name: Upload Release Binaries
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            couple_app_mobile/build/app/outputs/flutter-apk/app-release.apk
+            couple_app_mobile/build/ios/iphoneos/Runner.app
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -4,6 +4,8 @@ import 'widgets/kazikazan_widget.dart';
 import 'widgets/who_is_more_widget.dart';
 import 'widgets/flame_slider.dart';
 import 'widgets/red_room_video_task.dart';
+import 'widgets/spicy_truth_dare_widget.dart';
+import 'widgets/spicy_never_ever_widget.dart';
 
 class GamesScreen extends StatefulWidget {
   const GamesScreen({super.key});
@@ -103,6 +105,11 @@ class _GamesScreenState extends State<GamesScreen> with SingleTickerProviderStat
             FlameSlider(),
             SizedBox(height: 32),
             RedRoomVideoTask(),
+            SizedBox(height: 24),
+            SpicyTruthDareWidget(),
+            SizedBox(height: 24),
+            SpicyNeverEverWidget(),
+            SizedBox(height: 40),
           ],
         ),
       ),

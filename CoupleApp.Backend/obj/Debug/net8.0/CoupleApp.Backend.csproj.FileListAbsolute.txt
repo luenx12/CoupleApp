@@ -116,3 +116,12 @@ C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\obj\Debug\net8.0\refint\Couple
 C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\obj\Debug\net8.0\CoupleApp.Backend.pdb
 C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\obj\Debug\net8.0\CoupleApp.Backend.genruntimeconfig.cache
 C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\obj\Debug\net8.0\ref\CoupleApp.Backend.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\obj\Debug\net8.0\CoupleApp.Backend.sourcelink.json
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\MediatR.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\MediatR.Contracts.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\CoupleApp.Application.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\CoupleApp.Core.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\CoupleApp.Infrastructure.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\CoupleApp.Application.pdb
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\CoupleApp.Infrastructure.pdb
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\CoupleApp.Core.pdb

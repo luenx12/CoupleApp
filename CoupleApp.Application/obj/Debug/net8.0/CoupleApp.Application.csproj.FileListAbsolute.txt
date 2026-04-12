@@ -1,0 +1,16 @@
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\bin\Debug\net8.0\CoupleApp.Application.deps.json
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\bin\Debug\net8.0\CoupleApp.Application.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\bin\Debug\net8.0\CoupleApp.Application.pdb
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\bin\Debug\net8.0\CoupleApp.Core.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\bin\Debug\net8.0\CoupleApp.Core.pdb
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\obj\Debug\net8.0\CoupleApp.Application.csproj.AssemblyReference.cache
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\obj\Debug\net8.0\CoupleApp.Application.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\obj\Debug\net8.0\CoupleApp.Application.AssemblyInfoInputs.cache
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\obj\Debug\net8.0\CoupleApp.Application.AssemblyInfo.cs
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\obj\Debug\net8.0\CoupleApp.Application.csproj.CoreCompileInputs.cache
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\obj\Debug\net8.0\CoupleApp.Application.sourcelink.json
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\obj\Debug\net8.0\CoupleAp.6EBB42BF.Up2Date
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\obj\Debug\net8.0\CoupleApp.Application.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\obj\Debug\net8.0\refint\CoupleApp.Application.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\obj\Debug\net8.0\CoupleApp.Application.pdb
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Application\obj\Debug\net8.0\ref\CoupleApp.Application.dll

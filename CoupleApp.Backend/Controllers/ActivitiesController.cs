@@ -1,5 +1,5 @@
-using CoupleApp.Backend.Data;
-using CoupleApp.Backend.Entities;
+using CoupleApp.Core.Entities;
+using CoupleApp.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -51,8 +51,8 @@ public class ActivitiesController : ControllerBase
         var activity = await _db.Activities.FindAsync(id);
         if (activity is null || activity.CreatedByUserId != userId) return NotFound();
 
-        activity.IsCompleted  = true;
-        activity.CompletedAt  = DateTime.UtcNow;
+        activity.IsCompleted = true;
+        activity.CompletedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return Ok(activity);
     }

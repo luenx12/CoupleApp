@@ -14,15 +14,29 @@ class RedRoomVideoTask extends ConsumerStatefulWidget {
 }
 
 class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
+  final List<String> _tasks = [
+    "En sevdiğin kıyafetinle partnerine 10 saniyelik bir öpücük videosu gönder! 😘",
+    "Partnerine 15 saniyelik bir twerk videosu gönder! 🔥",
+    "Sadece sevdiğin bir iç çamaşırıyla 10 saniye boyunca dans et. 💃",
+    "Ayna karşısında partnerine seksi bir göz kırpma ve öpücük videosu at. 😉",
+    "Üzerindeki bir kıyafeti yavaşça çıkarırken 10 saniyelik bir video çek. 👙",
+    "Partnerine en çekici bulduğun yerini gösteren kısa bir video gönder. ❤️",
+    "Karanlık bir ortamda sadece telefon ışığıyla seksi bir video çek. 🌑",
+    "Partnerine dudaklarını yakından gösteren bir video at. 💋",
+    "Kendi üzerinde en sevdiğin dövme veya izi gösteren bir video çek. ✨",
+    "Partnerine 'Seni bekliyorum' diyen seksi bir fısıltı videosu gönder. 🤫",
+  ];
+
   Timer? _timer;
   int _secondsRemaining = 0;
   bool _isTaskActive = false;
-  final String _mockTask = "En sevdiğin kıyafetinle partnerine 10 saniyelik bir öpücük videosu gönder! 😘";
+  String _currentTask = "";
 
   void _startTask() {
     setState(() {
+      _currentTask = _tasks[DateTime.now().millisecond % _tasks.length];
       _isTaskActive = true;
-      _secondsRemaining = 120; // 2 minutes to complete
+      _secondsRemaining = 180; // 3 minutes to complete
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsRemaining > 0) {
@@ -31,6 +45,12 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
         _timer?.cancel();
         setState(() => _isTaskActive = false);
       }
+    });
+  }
+
+  void _nextTask() {
+    setState(() {
+      _currentTask = _tasks[(DateTime.now().millisecond + 1) % _tasks.length];
     });
   }
 
@@ -155,9 +175,19 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
                 Column(
                   children: [
                     Text(
-                      _mockTask,
+                      _currentTask,
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.white, fontSize: 15),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: _nextTask,
+                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                      label: const Text("BAŞKA GÖREV VER"),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white54,
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
                     ),
                     const SizedBox(height: 20),
                     Row(

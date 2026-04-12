@@ -1,5 +1,8 @@
 using System.Text;
-using CoupleApp.Backend.Data;
+using CoupleApp.Application;
+using CoupleApp.Infrastructure;
+using CoupleApp.Infrastructure.Persistence;
+using CoupleApp.Core.Entities;
 using CoupleApp.Backend.Hubs;
 using CoupleApp.Backend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -10,10 +13,10 @@ using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 // ════════════════════════════════════════════════════════════════════
-//  1. DATABASE — PostgreSQL via EF Core
+//  1. CLEAN ARCHITECTURE LAYERS
 // ════════════════════════════════════════════════════════════════════
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
 
 // ════════════════════════════════════════════════════════════════════
 //  2. AUTHENTICATION — JWT Bearer
@@ -62,9 +65,9 @@ builder.Services.AddSignalR(options =>
 });
 
 // ════════════════════════════════════════════════════════════════════
-//  4. DI — Application Services
+//  4. SINGLETON SERVICES
 // ════════════════════════════════════════════════════════════════════
-builder.Services.AddSingleton<IConnectionManager, ConnectionManager>(); // Singleton: shared state
+builder.Services.AddSingleton<IConnectionManager, ConnectionManager>(); // shared connection state
 
 // ════════════════════════════════════════════════════════════════════
 //  5. CONTROLLERS + SWAGGER
@@ -77,10 +80,9 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title       = "CoupleApp API",
         Version     = "v1",
-        Description = "Zero-Leak E2EE Couple Application Backend"
+        Description = "Zero-Leak E2EE Couple Application Backend — Clean Architecture"
     });
 
-    // Enable JWT auth in Swagger UI
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name         = "Authorization",
@@ -109,8 +111,8 @@ builder.Services.AddCors(o => o.AddPolicy("DevPolicy", p =>
     p.WithOrigins(
         "http://localhost:3000",
         "http://localhost:5173",
-        "http://localhost:8080",   // Flutter web (debug)
-        "http://localhost:8081"    // Flutter web (alternate port)
+        "http://localhost:8080",
+        "http://localhost:8081"
      )
      .AllowAnyHeader()
      .AllowAnyMethod()

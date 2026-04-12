@@ -7,13 +7,78 @@ import '../../../core/config/app_config.dart';
 
 final localAuthProvider  = Provider<LocalAuthentication>((_) => LocalAuthentication());
 
-final dioProvider = Provider<Dio>((ref) => Dio(
-  BaseOptions(
+// The Dio provider with Interceptor attached
+final dioProvider = Provider<Dio>((ref) {
+  final dio = Dio(BaseOptions(
     baseUrl: AppConfig.apiUrl,
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 10),
-  ),
-));
+  ));
+
+  dio.interceptors.add(AuthInterceptor(dio, ref.read(secureStorageProvider), ref));
+  return dio;
+});
+
+class AuthInterceptor extends Interceptor {
+  final Dio dio;
+  final FlutterSecureStorage storage;
+  final ProviderRef ref;
+
+  AuthInterceptor(this.dio, this.storage, this.ref);
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+    final token = await storage.read(key: 'access_token');
+    if (token != null) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+    return handler.next(options);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (err.response?.statusCode == 401) {
+      // Access token expired, attempt refresh
+      final refreshToken = await storage.read(key: 'refresh_token');
+      if (refreshToken != null) {
+        try {
+          // Send request with an isolated Dio instance to prevent interceptor loop
+          final refreshDio = Dio(BaseOptions(baseUrl: AppConfig.apiUrl));
+          final res = await refreshDio.post('/Auth/refresh', data: {
+            'refreshToken': refreshToken
+          });
+
+          final newAccess = res.data['accessToken'];
+          final newRefresh = res.data['refreshToken'];
+
+          // Save new tokens
+          await storage.write(key: 'access_token', value: newAccess);
+          await storage.write(key: 'refresh_token', value: newRefresh);
+
+          // Retry the original request
+          err.requestOptions.headers['Authorization'] = 'Bearer $newAccess';
+          final cloneReq = await dio.request(
+            err.requestOptions.path,
+            options: Options(
+              method: err.requestOptions.method,
+              headers: err.requestOptions.headers,
+            ),
+            data: err.requestOptions.data,
+            queryParameters: err.requestOptions.queryParameters,
+          );
+          
+          return handler.resolve(cloneReq);
+        } catch (_) {
+          // Token rotation failed or refresh token expired -> Logout
+          ref.read(authNotifierProvider.notifier).logout();
+        }
+      } else {
+        ref.read(authNotifierProvider.notifier).logout();
+      }
+    }
+    return handler.next(err);
+  }
+}
 
 final authNotifierProvider =
     StateNotifierProvider<AuthNotifier, AuthState>((ref) => AuthNotifier(
@@ -85,10 +150,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final res = await _dio.post('/Auth/login',
           data: {'username': username, 'password': password});
-      final token  = res.data['accessToken'] as String;
-      final userId = res.data['id']           as String;
-      final uname  = res.data['username']     as String;
+      final token     = res.data['accessToken'] as String;
+      final refresh   = res.data['refreshToken'] as String;
+      final userId    = res.data['id']           as String;
+      final uname     = res.data['username']     as String;
       await _storage.write(key: 'access_token', value: token);
+      await _storage.write(key: 'refresh_token', value: refresh);
       await _storage.write(key: 'user_id',      value: userId);
       await _storage.write(key: 'username',     value: uname);
       state = state.copyWith(
@@ -117,6 +184,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    try {
+      final token = state.accessToken;
+      if (token != null) {
+        await _dio.post('/Auth/revoke');
+      }
+    } catch (_) {}
+
     await _storage.deleteAll();
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
@@ -130,7 +204,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(seconds: 5),
       ));
-      final res = await dio.get('/Auth/partner');
+      final res = await dio.get('/couple/partner');
       final data = res.data as Map<String, dynamic>;
       state = state.copyWith(
         partnerId:        data['id']?.toString(),
@@ -138,7 +212,43 @@ class AuthNotifier extends StateNotifier<AuthState> {
         partnerPublicKey: data['publicKey']?.toString(),
       );
     } catch (_) {
-      // Partner kayıtlı değilse sessizce geç
+      // If no partner is found or request fails, clear partner data
+      state = state.copyWith(
+        partnerId: null,
+        partnerName: null,
+        partnerPublicKey: null,
+      );
+    }
+  }
+
+  Future<String?> invitePartner() async {
+    final token = state.accessToken;
+    if (token == null) return null;
+    try {
+      final dio = Dio(BaseOptions(
+        baseUrl: AppConfig.apiUrl,
+        headers: {'Authorization': 'Bearer $token'},
+      ));
+      final res = await dio.post('/couple/invite');
+      return res.data['inviteCode'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> joinWithCode(String code) async {
+    final token = state.accessToken;
+    if (token == null) return false;
+    try {
+      final dio = Dio(BaseOptions(
+        baseUrl: AppConfig.apiUrl,
+        headers: {'Authorization': 'Bearer $token'},
+      ));
+      await dio.post('/couple/join/$code');
+      await _fetchPartner(token); // Load the newly joined partner
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 }

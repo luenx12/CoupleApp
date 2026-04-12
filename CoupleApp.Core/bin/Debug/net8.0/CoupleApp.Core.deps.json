@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "CoupleApp.Core/1.0.0": {
+        "runtime": {
+          "CoupleApp.Core.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "CoupleApp.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

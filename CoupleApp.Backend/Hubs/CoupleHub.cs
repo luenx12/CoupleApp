@@ -1,9 +1,8 @@
-using CoupleApp.Backend.Data;
-using CoupleApp.Backend.Entities;
 using CoupleApp.Backend.Services;
+using CoupleApp.Core.Entities;
+using CoupleApp.Core.Interfaces.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace CoupleApp.Backend.Hubs;
@@ -11,22 +10,26 @@ namespace CoupleApp.Backend.Hubs;
 /// <summary>
 /// SignalR Hub — main real-time channel between two partners.
 /// All messages arrive already encrypted (E2EE); server persists ciphertext only.
+/// Refactored to use IMessageRepository and IUserRepository instead of AppDbContext directly.
 /// </summary>
 [Authorize]
 public class CoupleHub : Hub
 {
-    private readonly IConnectionManager _connectionManager;
-    private readonly AppDbContext _db;
-    private readonly ILogger<CoupleHub> _logger;
+    private readonly IConnectionManager  _connectionManager;
+    private readonly IMessageRepository  _messages;
+    private readonly IUserRepository     _users;
+    private readonly ILogger<CoupleHub>  _logger;
 
     public CoupleHub(
-        IConnectionManager connectionManager,
-        AppDbContext db,
-        ILogger<CoupleHub> logger)
+        IConnectionManager  connectionManager,
+        IMessageRepository  messages,
+        IUserRepository     users,
+        ILogger<CoupleHub>  logger)
     {
         _connectionManager = connectionManager;
-        _db = db;
-        _logger = logger;
+        _messages          = messages;
+        _users             = users;
+        _logger            = logger;
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -57,7 +60,6 @@ public class CoupleHub : Hub
     /// Receives an already-encrypted message from the sender, persists it to DB,
     /// and forwards it to the partner if they are online — Zero-Leak: no plaintext ever touches the server.
     /// </summary>
-    /// <param name="dto">Send message payload</param>
     public async Task SendMessageAsync(SendMessageDto dto)
     {
         var senderId = GetUserId();
@@ -70,7 +72,7 @@ public class CoupleHub : Hub
         }
 
         // 2. Verify the receiver exists
-        var receiver = await _db.Users.FindAsync(dto.ReceiverId);
+        var receiver = await _users.GetByIdAsync(dto.ReceiverId);
         if (receiver is null)
         {
             await Clients.Caller.SendAsync("Error", $"Receiver {dto.ReceiverId} not found.");
@@ -91,8 +93,8 @@ public class CoupleHub : Hub
             SentAt                 = DateTime.UtcNow
         };
 
-        _db.Messages.Add(message);
-        await _db.SaveChangesAsync();
+        await _messages.AddAsync(message);
+        await _messages.SaveChangesAsync();
 
         // 4. Build the delivery payload (still ciphertext)
         var payload = new MessageDeliveryDto
@@ -110,19 +112,24 @@ public class CoupleHub : Hub
         var receiverConnections = _connectionManager.GetConnections(dto.ReceiverId);
         if (receiverConnections.Count > 0)
         {
-            await Clients.Clients(receiverConnections)
-                         .SendAsync("ReceiveMessage", payload);
+            await Clients.Clients(receiverConnections).SendAsync("ReceiveMessage", payload);
 
             // Mark as delivered
             message.IsDelivered = true;
             message.DeliveredAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+            await _messages.SaveChangesAsync();
         }
 
         // 6. Acknowledge to sender
-        await Clients.Caller.SendAsync("MessageSent", new { message.Id, message.SentAt, message.IsDelivered });
+        await Clients.Caller.SendAsync("MessageSent", new
+        {
+            message.Id,
+            message.SentAt,
+            message.IsDelivered
+        });
 
-        _logger.LogInformation("Message {MessageId} sent: {SenderId} → {ReceiverId}, delivered={Delivered}",
+        _logger.LogInformation(
+            "Message {MessageId} sent: {SenderId} → {ReceiverId}, delivered={Delivered}",
             message.Id, senderId, dto.ReceiverId, message.IsDelivered);
     }
 
@@ -130,26 +137,17 @@ public class CoupleHub : Hub
     // Location sharing (all payloads are E2EE-encrypted by client)
     // ──────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Sender asks partner: "Where are you?"  
-    /// Partner receives "LocationRequested" event with requesterId.
-    /// </summary>
     public async Task RequestLocationAsync(Guid partnerId)
     {
-        var requesterId  = GetUserId();
-        var connections  = _connectionManager.GetConnections(partnerId);
+        var requesterId = GetUserId();
+        var connections = _connectionManager.GetConnections(partnerId);
         if (connections.Count > 0)
             await Clients.Clients(connections)
                          .SendAsync("LocationRequested", new { RequesterId = requesterId });
 
-        _logger.LogInformation("User {RequesterId} requested location from {PartnerId}",
-            requesterId, partnerId);
+        _logger.LogInformation("User {RequesterId} requested location from {PartnerId}", requesterId, partnerId);
     }
 
-    /// <summary>
-    /// Partner approved and shares their encrypted GPS coordinates.
-    /// Requester receives "LocationShared" with the encrypted payload.
-    /// </summary>
     public async Task ShareLocationAsync(Guid requesterId, string encryptedPayload)
     {
         var sharerId    = GetUserId();
@@ -162,13 +160,9 @@ public class CoupleHub : Hub
                              EncryptedPayload = encryptedPayload
                          });
 
-        _logger.LogInformation("User {SharerId} shared location with {RequesterId}",
-            sharerId, requesterId);
+        _logger.LogInformation("User {SharerId} shared location with {RequesterId}", sharerId, requesterId);
     }
 
-    /// <summary>
-    /// Partner denied the location request.
-    /// </summary>
     public async Task DenyLocationAsync(Guid requesterId)
     {
         var deniedById  = GetUserId();
@@ -178,27 +172,29 @@ public class CoupleHub : Hub
                          .SendAsync("LocationDenied", new { DeniedById = deniedById });
     }
 
-    /// <summary>
-    /// Called by receiver to mark a message as read.
-    /// </summary>
+    // ──────────────────────────────────────────────────────────────────────
+    // MarkAsRead (real-time path via Hub)
+    // ──────────────────────────────────────────────────────────────────────
+
     public async Task MarkAsReadAsync(Guid messageId)
     {
-        var userId = GetUserId();
+        var userId  = GetUserId();
+        var success = await _messages.MarkAsReadAsync(messageId, userId);
 
-        var message = await _db.Messages.FindAsync(messageId);
-        if (message is null || message.ReceiverId != userId) return;
-
-        if (!message.IsRead)
+        if (success)
         {
-            message.IsRead  = true;
-            message.ReadAt  = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-
-            // Notify sender
-            var senderConnections = _connectionManager.GetConnections(message.SenderId);
-            if (senderConnections.Count > 0)
-                await Clients.Clients(senderConnections)
-                             .SendAsync("MessageRead", new { MessageId = messageId, ReadAt = message.ReadAt });
+            var message = await _messages.GetByIdAsync(messageId);
+            if (message is not null)
+            {
+                var senderConnections = _connectionManager.GetConnections(message.SenderId);
+                if (senderConnections.Count > 0)
+                    await Clients.Clients(senderConnections)
+                                 .SendAsync("MessageRead", new
+                                 {
+                                     MessageId = messageId,
+                                     ReadAt    = message.ReadAt
+                                 });
+            }
         }
     }
 
@@ -247,7 +243,12 @@ public class CoupleHub : Hub
         var connections = _connectionManager.GetConnections(partnerId);
         if (connections.Count > 0)
             await Clients.Clients(connections)
-                         .SendAsync("WhoIsMoreAnswered", new { SenderId = senderId, QuestionId = questionId, Answer = answer });
+                         .SendAsync("WhoIsMoreAnswered", new
+                         {
+                             SenderId   = senderId,
+                             QuestionId = questionId,
+                             Answer     = answer
+                         });
     }
 
     public async Task SendFlameLevelAsync(Guid partnerId, double level)
@@ -265,7 +266,12 @@ public class CoupleHub : Hub
         var connections = _connectionManager.GetConnections(partnerId);
         if (connections.Count > 0)
             await Clients.Clients(connections)
-                         .SendAsync("RedRoomMediaReceived", new { SenderId = senderId, MediaId = mediaId, TimeoutSeconds = timeoutSeconds });
+                         .SendAsync("RedRoomMediaReceived", new
+                         {
+                             SenderId       = senderId,
+                             MediaId        = mediaId,
+                             TimeoutSeconds = timeoutSeconds
+                         });
     }
 
     // ──────────────────────────────────────────────────────────────────────

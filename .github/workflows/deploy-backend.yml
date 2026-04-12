@@ -68,11 +68,11 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd /opt/coupleapp
-            echo "JWT_SECRET='${{ secrets.JWT_SECRET }}'" > .env
-            echo "FCM_KEY='${{ secrets.FCM_KEY }}'" >> .env
-            echo "SENTRY_DSN='${{ secrets.SENTRY_DSN }}'" >> .env
-            echo "DB_PASSWORD='${{ secrets.DB_PASSWORD }}'" >> .env
-            echo "DOCKERHUB_USERNAME='${{ secrets.DOCKERHUB_USERNAME }}'" >> .env
+            echo "JWT_SECRET="${{ secrets.JWT_SECRET }}" > .env
+            echo "FCM_KEY="${{ secrets.FCM_KEY }}" >> .env
+            echo "SENTRY_DSN="${{ secrets.SENTRY_DSN }}" >> .env
+            echo "DB_PASSWORD="${{ secrets.DB_PASSWORD }}" >> .env
+            echo "DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}" >> .env
 
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml down

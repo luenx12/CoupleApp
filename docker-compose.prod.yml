@@ -5,10 +5,8 @@ services:
     image: postgres:16-alpine
     container_name: coupleapp_prod_db
     restart: unless-stopped
-
     ports:
       - "127.0.0.1:5432:5432"
-      
     environment:
       POSTGRES_DB: CoupleAppProdDb
       POSTGRES_USER: postgres
@@ -29,13 +27,22 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      DB_PASSWORD: ${DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
-      FCM_KEY: ${FCM_KEY}
-      SENTRY_DSN: ${SENTRY_DSN}
+      - ASPNETCORE_ENVIRONMENT=Production
+      # --- KRİTİK AYARLAR BAŞLIYOR ---
+      # appsettings.json içindeki localhost'u burada 'postgres' ile eziyoruz:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=CoupleAppProdDb;Username=postgres;Password=${DB_PASSWORD}
+      
+      # appsettings içindeki Jwt:Secret kısmını günceller:
+      - Jwt__Secret=${JWT_SECRET}
+      
+      # appsettings içindeki Sentry:Dsn kısmını günceller:
+      - Sentry__Dsn=${SENTRY_DSN}
+      
+      # FCM Key (Eğer kodda 'Firebase:ServerKey' gibi bir yer varsa ona göre isimlendirilebilir):
+      - FCM_KEY=${FCM_KEY}
+      # --- KRİTİK AYARLAR BİTTİ ---
     ports:
-      - "5000:8080" # Exposed internally to NGINX via 5000, 8080 is internal Docker SDK 8.0 default
+      - "5000:8080"
 
   nginx:
     image: nginx:alpine

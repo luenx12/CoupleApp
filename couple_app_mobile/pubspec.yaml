@@ -59,10 +59,14 @@ dependencies:
   scratcher: ^2.5.0
   confetti: ^0.8.0
   video_player: ^2.10.1
+  fl_chart: ^0.68.0
+
+  # ── Aşama 7: Offline-First / OutboxQueue ───────────────────────────────
+  connectivity_plus: ^6.1.4
 
   # ── Aşama 6: FCM Push Notifications ───────────────────────────────────
-  firebase_core: ^2.32.0
-  firebase_messaging: ^14.9.4
+  firebase_core: any
+  firebase_messaging: any
   flutter_local_notifications: ^17.1.2
 
 

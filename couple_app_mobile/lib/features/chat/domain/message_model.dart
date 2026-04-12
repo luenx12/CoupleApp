@@ -4,6 +4,9 @@
 
 enum MsgType { text, image, voice }
 
+/// Optimistic UI gönderim durumu
+enum SendStatus { sent, pending, failed }
+
 class MessageModel {
   const MessageModel({
     required this.id,
@@ -18,6 +21,7 @@ class MessageModel {
     this.localMediaPath,
     this.remoteMediaId,
     this.mediaDeleted = false,
+    this.sendStatus = SendStatus.sent,
   });
 
   /// Sunucudan gelen UUID (veya local UUID for optimistic messages)
@@ -45,14 +49,19 @@ class MessageModel {
   /// Medya sunucudan silindi mi?
   final bool mediaDeleted;
 
+  /// Optimistic UI: pending = outbox'ta, failed = max retry aşıldı
+  final SendStatus sendStatus;
+
   MessageModel copyWith({
+    String? id,
     bool? isRead,
     bool? isDelivered,
     bool? mediaDeleted,
     String? localMediaPath,
+    SendStatus? sendStatus,
   }) =>
       MessageModel(
-        id:             id,
+        id:             id             ?? this.id,
         senderId:       senderId,
         receiverId:     receiverId,
         plainText:      plainText,
@@ -64,6 +73,7 @@ class MessageModel {
         localMediaPath: localMediaPath ?? this.localMediaPath,
         remoteMediaId:  remoteMediaId,
         mediaDeleted:   mediaDeleted   ?? this.mediaDeleted,
+        sendStatus:     sendStatus     ?? this.sendStatus,
       );
 
   // ── sqflite serialization ────────────────────────────────────────────────
@@ -83,6 +93,7 @@ class MessageModel {
     'local_media_path': localMediaPath,
     'remote_media_id':  remoteMediaId,
     'media_deleted':    mediaDeleted ? 1 : 0,
+    'send_status':      sendStatus.index,
   };
 
   factory MessageModel.fromMap(Map<String, dynamic> m) => MessageModel(
@@ -98,6 +109,7 @@ class MessageModel {
     localMediaPath: m['local_media_path'] as String?,
     remoteMediaId:  m['remote_media_id'] as String?,
     mediaDeleted:   (m['media_deleted'] as int?) == 1,
+    sendStatus:     SendStatus.values[m['send_status'] as int? ?? 0],
   );
 
   static String get tableName => _table;

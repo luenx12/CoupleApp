@@ -11,7 +11,6 @@ class SpicyNeverEverWidget extends StatefulWidget {
 
 class _SpicyNeverEverWidgetState extends State<SpicyNeverEverWidget> {
   int _currentIndex = 0;
-  bool _revealed = false;
 
   final List<String> _statements = [
     "Ben hiç... partnerimin yanında çıplak uyumadım. 🛏️",
@@ -27,7 +26,6 @@ class _SpicyNeverEverWidgetState extends State<SpicyNeverEverWidget> {
   void _next() {
     setState(() {
       _currentIndex = Random().nextInt(_statements.length);
-      _revealed = false;
     });
   }
 

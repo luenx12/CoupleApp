@@ -1,12 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// ChatDatabase — sqflite local message store
+// ChatDatabase — sqflite local message store  (v2: outbox tablosu eklendi)
 //
-// Yalnızca çözülmüş plaintext metin mesajlar saklanır.
-// Medya mesajları için sadece yerel .aes dosya yolu saklanır.
+// v1 → messages tablosu (plaintext + medya yolu)
+// v2 → outbox_messages tablosu + messages.send_status kolonu
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import 'package:sqflite/sqflite.dart';
 import '../domain/message_model.dart';
+import '../domain/outbox_message.dart';
 
 
 class ChatDatabase {
@@ -27,11 +28,13 @@ class ChatDatabase {
 
     return openDatabase(
       path,
-      version: 1,
-      onCreate: _onCreate,
+      version: 2,               // ← v2
+      onCreate:  _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
+  // ── Schema v1 ────────────────────────────────────────────────────────────
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
       CREATE TABLE ${MessageModel.tableName} (
@@ -46,16 +49,50 @@ class ChatDatabase {
         is_delivered     INTEGER NOT NULL DEFAULT 1,
         local_media_path TEXT,
         remote_media_id  TEXT,
-        media_deleted    INTEGER NOT NULL DEFAULT 0
+        media_deleted    INTEGER NOT NULL DEFAULT 0,
+        send_status      INTEGER NOT NULL DEFAULT 0
       )
     ''');
-    // İndeks: konuşmaya göre sıralı çekme
     await db.execute(
       'CREATE INDEX idx_messages_conv ON ${MessageModel.tableName}(sender_id, receiver_id, sent_at)',
     );
+
+    await _createOutboxTable(db);
   }
 
-  // ── CRUD ────────────────────────────────────────────────────────────────
+  // ── Migration v1 → v2 ────────────────────────────────────────────────────
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Yeni kolon mevcut tabloya ekle
+      try {
+        await db.execute(
+          'ALTER TABLE ${MessageModel.tableName} ADD COLUMN send_status INTEGER NOT NULL DEFAULT 0',
+        );
+      } catch (_) {
+        // Kolon zaten varsa sessizce geç
+      }
+      await _createOutboxTable(db);
+    }
+  }
+
+  // ── Outbox tablosu ───────────────────────────────────────────────────────
+  Future<void> _createOutboxTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${OutboxMessage.tableName} (
+        local_id                   TEXT    PRIMARY KEY,
+        encrypted_text             TEXT    NOT NULL,
+        encrypted_text_for_sender  TEXT    NOT NULL,
+        iv                         TEXT    NOT NULL DEFAULT '',
+        media_id                   TEXT,
+        type                       INTEGER NOT NULL DEFAULT 0,
+        created_at                 INTEGER NOT NULL,
+        status                     INTEGER NOT NULL DEFAULT 0,
+        retry_count                INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
+  // ── Messages CRUD ────────────────────────────────────────────────────────
 
   Future<void> insertMessage(MessageModel msg) async {
     final db = await database;
@@ -117,8 +154,93 @@ class ChatDatabase {
     );
   }
 
+  /// Mesajın sunucu ID ve send_status'unu güncelle (optimistic → confirmed)
+  Future<void> confirmMessage({
+    required String localId,
+    required String serverId,
+    required int sendStatus,
+  }) async {
+    final db = await database;
+    await db.update(
+      MessageModel.tableName,
+      {'id': serverId, 'send_status': sendStatus, 'is_delivered': 1},
+      where: 'id = ?',
+      whereArgs: [localId],
+    );
+  }
+
+  /// Sadece send_status güncelle (pending → failed vs.)
+  Future<void> updateSendStatus(String messageId, SendStatus status) async {
+    final db = await database;
+    await db.update(
+      MessageModel.tableName,
+      {'send_status': status.index},
+      where: 'id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
   Future<void> deleteAll() async {
     final db = await database;
     await db.delete(MessageModel.tableName);
+  }
+
+  // ── Outbox CRUD ──────────────────────────────────────────────────────────
+
+  Future<void> insertOutbox(OutboxMessage msg) async {
+    final db = await database;
+    await db.insert(
+      OutboxMessage.tableName,
+      msg.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<OutboxMessage>> getPendingOutbox() async {
+    final db = await database;
+    final rows = await db.query(
+      OutboxMessage.tableName,
+      where: 'status = ?',
+      whereArgs: [OutboxStatus.pending.index],
+      orderBy: 'created_at ASC',
+    );
+    return rows.map(OutboxMessage.fromMap).toList();
+  }
+
+  Future<void> markOutboxSent(String localId) async {
+    final db = await database;
+    await db.update(
+      OutboxMessage.tableName,
+      {'status': OutboxStatus.sent.index},
+      where: 'local_id = ?',
+      whereArgs: [localId],
+    );
+  }
+
+  Future<void> markOutboxFailed(String localId) async {
+    final db = await database;
+    await db.update(
+      OutboxMessage.tableName,
+      {'status': OutboxStatus.failed.index},
+      where: 'local_id = ?',
+      whereArgs: [localId],
+    );
+  }
+
+  Future<void> incrementOutboxRetry(String localId) async {
+    final db = await database;
+    await db.rawUpdate(
+      'UPDATE ${OutboxMessage.tableName} SET retry_count = retry_count + 1 WHERE local_id = ?',
+      [localId],
+    );
+  }
+
+  Future<void> deleteOutbox(String localId) async {
+    final db = await database;
+    await db.delete(
+      OutboxMessage.tableName,
+      where: 'local_id = ?',
+      whereArgs: [localId],
+    );
   }
 }

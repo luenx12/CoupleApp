@@ -121,6 +121,101 @@ namespace CoupleApp.Backend.Migrations
                     b.ToTable("CouplePairs");
                 });
 
+            modelBuilder.Entity("CoupleApp.Core.Entities.DailyQuestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("QuestionText")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DailyQuestions");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("20000001-0000-0000-0000-000000000001"),
+                            Category = "Genel",
+                            CreatedAt = new DateTime(2026, 4, 12, 12, 55, 48, 770, DateTimeKind.Utc).AddTicks(9733),
+                            QuestionText = "Kim daha çok uyur?"
+                        },
+                        new
+                        {
+                            Id = new Guid("20000001-0000-0000-0000-000000000002"),
+                            Category = "Yetenek",
+                            CreatedAt = new DateTime(2026, 4, 12, 12, 55, 48, 770, DateTimeKind.Utc).AddTicks(9749),
+                            QuestionText = "Kim daha iyi yemek yapar?"
+                        },
+                        new
+                        {
+                            Id = new Guid("20000001-0000-0000-0000-000000000003"),
+                            Category = "İlişki",
+                            CreatedAt = new DateTime(2026, 4, 12, 12, 55, 48, 770, DateTimeKind.Utc).AddTicks(9750),
+                            QuestionText = "Kim daha romantiktir?"
+                        },
+                        new
+                        {
+                            Id = new Guid("20000001-0000-0000-0000-000000000004"),
+                            Category = "Günlük",
+                            CreatedAt = new DateTime(2026, 4, 12, 12, 55, 48, 770, DateTimeKind.Utc).AddTicks(9752),
+                            QuestionText = "Kim daha sakardır?"
+                        },
+                        new
+                        {
+                            Id = new Guid("20000001-0000-0000-0000-000000000005"),
+                            Category = "Finans",
+                            CreatedAt = new DateTime(2026, 4, 12, 12, 55, 48, 770, DateTimeKind.Utc).AddTicks(9754),
+                            QuestionText = "Kim daha çok para harcar?"
+                        });
+                });
+
+            modelBuilder.Entity("CoupleApp.Core.Entities.DailyTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsAccepted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("PairId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Points")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TaskText")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DailyTasks");
+                });
+
             modelBuilder.Entity("CoupleApp.Core.Entities.DeviceToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -151,6 +246,207 @@ namespace CoupleApp.Backend.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("DeviceTokens");
+                });
+
+            modelBuilder.Entity("CoupleApp.Core.Entities.DrawSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DrawerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("GuessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GuesserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ScoreAwarded")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("WinnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Word")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DrawerId");
+
+                    b.HasIndex("GuesserId");
+
+                    b.ToTable("DrawSessions");
+                });
+
+            modelBuilder.Entity("CoupleApp.Core.Entities.DrawWord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("Difficulty")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Word")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DrawWords");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000001"),
+                            Category = "Yiyecek",
+                            Difficulty = 0,
+                            Word = "Elma"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000002"),
+                            Category = "Hayvan",
+                            Difficulty = 0,
+                            Word = "Kedi"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000003"),
+                            Category = "Hayvan",
+                            Difficulty = 0,
+                            Word = "Köpek"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000004"),
+                            Category = "Doğa",
+                            Difficulty = 0,
+                            Word = "Güneş"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000005"),
+                            Category = "Yapılar",
+                            Difficulty = 0,
+                            Word = "Ev"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000006"),
+                            Category = "Araçlar",
+                            Difficulty = 0,
+                            Word = "Araba"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000007"),
+                            Category = "Yiyecek",
+                            Difficulty = 0,
+                            Word = "Pizza"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000008"),
+                            Category = "Doğa",
+                            Difficulty = 0,
+                            Word = "Çiçek"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000009"),
+                            Category = "Araçlar",
+                            Difficulty = 1,
+                            Word = "Uçak"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000010"),
+                            Category = "Fantastik",
+                            Difficulty = 1,
+                            Word = "Ejderha"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000011"),
+                            Category = "Meslekler",
+                            Difficulty = 1,
+                            Word = "Astronot"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000012"),
+                            Category = "Eylemler",
+                            Difficulty = 1,
+                            Word = "Fısıldamak"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000013"),
+                            Category = "Doğa",
+                            Difficulty = 1,
+                            Word = "Yıldırım"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000014"),
+                            Category = "Kavramlar",
+                            Difficulty = 2,
+                            Word = "Özgürlük"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000015"),
+                            Category = "Duygular",
+                            Difficulty = 2,
+                            Word = "Kıskançlık"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000001-0000-0000-0000-000000000016"),
+                            Category = "Kavramlar",
+                            Difficulty = 2,
+                            Word = "Karantina"
+                        });
+                });
+
+            modelBuilder.Entity("CoupleApp.Core.Entities.FlameLevel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("Level")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "RecordedAt");
+
+                    b.ToTable("FlameLevels");
                 });
 
             modelBuilder.Entity("CoupleApp.Core.Entities.GalleryItem", b =>
@@ -370,6 +666,41 @@ namespace CoupleApp.Backend.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("CoupleApp.Core.Entities.UserStats", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("TotalPoints")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("WhoIsMoreMatches")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("WordleAverageAttempts")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("WordleCurrentStreak")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WordleMaxStreak")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WordleTotalPlayed")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("UserStats");
+                });
+
             modelBuilder.Entity("CoupleApp.Core.Entities.Activity", b =>
                 {
                     b.HasOne("CoupleApp.Core.Entities.User", "CreatedBy")
@@ -415,6 +746,36 @@ namespace CoupleApp.Backend.Migrations
                 {
                     b.HasOne("CoupleApp.Core.Entities.User", "User")
                         .WithMany("DeviceTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("CoupleApp.Core.Entities.DrawSession", b =>
+                {
+                    b.HasOne("CoupleApp.Core.Entities.User", "Drawer")
+                        .WithMany()
+                        .HasForeignKey("DrawerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CoupleApp.Core.Entities.User", "Guesser")
+                        .WithMany()
+                        .HasForeignKey("GuesserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Drawer");
+
+                    b.Navigation("Guesser");
+                });
+
+            modelBuilder.Entity("CoupleApp.Core.Entities.FlameLevel", b =>
+                {
+                    b.HasOne("CoupleApp.Core.Entities.User", "User")
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -483,6 +844,17 @@ namespace CoupleApp.Backend.Migrations
                 {
                     b.HasOne("CoupleApp.Core.Entities.User", "User")
                         .WithMany("RefreshTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("CoupleApp.Core.Entities.UserStats", b =>
+                {
+                    b.HasOne("CoupleApp.Core.Entities.User", "User")
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

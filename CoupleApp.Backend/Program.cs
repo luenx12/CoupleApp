@@ -65,10 +65,11 @@ builder.Services.AddSignalR(options =>
 });
 
 // ════════════════════════════════════════════════════════════════════
-//  4. SINGLETON SERVICES
+//  4. SINGLETON SERVICES & HOSTED SERVICES
 // ════════════════════════════════════════════════════════════════════
 builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
 builder.Services.AddSingleton<IFirebaseService, FirebaseService>();
+builder.Services.AddHostedService<DailyTaskHostedService>();
 
 // ════════════════════════════════════════════════════════════════════
 //  5. CONTROLLERS + SWAGGER
@@ -113,7 +114,9 @@ builder.Services.AddCors(o => o.AddPolicy("DevPolicy", p =>
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:8080",
-        "http://localhost:8081"
+        "http://localhost:8081",
+        "http://209.38.238.55",
+        "https://209.38.238.55"
      )
      .AllowAnyHeader()
      .AllowAnyMethod()

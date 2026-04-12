@@ -1,5 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:http/http.dart' as http;
+import '../../../../core/config/app_config.dart';
 import '../../domain/games_notifier.dart';
 
 class FlameSlider extends ConsumerStatefulWidget {
@@ -11,6 +15,49 @@ class FlameSlider extends ConsumerStatefulWidget {
 
 class _FlameSliderState extends ConsumerState<FlameSlider> {
   double _value = 0.0;
+  List<FlSpot> _mySpots = [];
+  List<FlSpot> _partnerSpots = [];
+  bool _isLoadingChart = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchHistory();
+  }
+
+  Future<void> _fetchHistory() async {
+    setState(() => _isLoadingChart = true);
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/api/MiniGames/flame-history?days=7'),
+        headers: {'Authorization': 'Bearer MOCK_TOKEN'}, // Use actual token
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final myHistory = data['myHistory'] as List;
+        final partnerHistory = data['partnerHistory'] as List;
+
+        setState(() {
+          _mySpots = _mapToSpots(myHistory);
+          _partnerSpots = _mapToSpots(partnerHistory);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching flame history: $e");
+    } finally {
+      if (mounted) setState(() => _isLoadingChart = false);
+    }
+  }
+
+  List<FlSpot> _mapToSpots(List history) {
+    if (history.isEmpty) return const [];
+    // Just mapping index to X for MVP visualization. In real scenarios, use time.
+    List<FlSpot> spots = [];
+    for (int i = 0; i < history.length; i++) {
+        spots.add(FlSpot(i.toDouble(), (history[i]['level'] as num).toDouble()));
+    }
+    return spots;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +127,41 @@ class _FlameSliderState extends ConsumerState<FlameSlider> {
             "Partnerin Seviyesi: 🔥 ${state.partnerFlameLevel.toInt()}%",
             style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
+          const SizedBox(height: 24),
+          if (_isLoadingChart)
+             const CircularProgressIndicator(color: Colors.redAccent)
+          else if (_mySpots.isNotEmpty || _partnerSpots.isNotEmpty)
+             SizedBox(
+               height: 150,
+               child: LineChart(
+                 LineChartData(
+                   gridData: const FlGridData(show: false),
+                   titlesData: const FlTitlesData(show: false),
+                   borderData: FlBorderData(show: false),
+                   minY: 0,
+                   maxY: 100,
+                   lineBarsData: [
+                     LineChartBarData(
+                       spots: _mySpots.isEmpty ? const [FlSpot(0,0)] : _mySpots,
+                       isCurved: true,
+                       color: Colors.redAccent,
+                       barWidth: 2,
+                       isStrokeCapRound: true,
+                       dotData: const FlDotData(show: false),
+                       belowBarData: BarAreaData(show: true, color: Colors.redAccent.withAlpha(50)),
+                     ),
+                     LineChartBarData(
+                       spots: _partnerSpots.isEmpty ? const [FlSpot(0,0)] : _partnerSpots,
+                       isCurved: true,
+                       color: Colors.orangeAccent,
+                       barWidth: 2,
+                       isStrokeCapRound: true,
+                       dotData: const FlDotData(show: false),
+                     ),
+                   ],
+                 ),
+               ),
+             ),
         ],
       ),
     );

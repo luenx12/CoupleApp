@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // MessageBubble — iMessage-style animated chat bubble
+// v2: Optimistic UI — pending (saat ikonu), failed (kırmızı ünlem) durumları
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import 'package:flutter/material.dart';
@@ -30,15 +31,19 @@ class MessageBubble extends StatelessWidget {
           top:    2,
           bottom: 2,
         ),
-        child: Column(
-          crossAxisAlignment: message.isMine
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
-          children: [
-            _BubbleBody(message: message),
-            if (showTime) const SizedBox(height: 2),
-            if (showTime) _TimeRow(message: message),
-          ],
+        child: Opacity(
+          // Pending mesajlar biraz saydam görünür
+          opacity: message.sendStatus == SendStatus.pending ? 0.65 : 1.0,
+          child: Column(
+            crossAxisAlignment: message.isMine
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
+            children: [
+              _BubbleBody(message: message),
+              if (showTime) const SizedBox(height: 2),
+              if (showTime) _TimeRow(message: message),
+            ],
+          ),
         ),
       ),
     )
@@ -60,33 +65,47 @@ class _BubbleBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Failed mesajlar için kırmızı kenarlık
+    final isFailed  = message.sendStatus == SendStatus.failed;
+    final isPending = message.sendStatus == SendStatus.pending;
+
     if (message.isMine) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [AppColors.primary, AppColors.secondary],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          gradient: isFailed
+              ? null
+              : const LinearGradient(
+                  colors: [AppColors.primary, AppColors.secondary],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+          color: isFailed ? AppColors.card : null,
           borderRadius: const BorderRadius.only(
             topLeft:     Radius.circular(18),
             topRight:    Radius.circular(18),
             bottomLeft:  Radius.circular(18),
             bottomRight: Radius.circular(4),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withAlpha(60),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          border: isFailed
+              ? Border.all(color: Colors.redAccent.withAlpha(180), width: 1.5)
+              : isPending
+                  ? Border.all(color: AppColors.primary.withAlpha(80), width: 1)
+                  : null,
+          boxShadow: isFailed
+              ? null
+              : [
+                  BoxShadow(
+                    color: AppColors.primary.withAlpha(60),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Text(
           message.plainText,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: isFailed ? AppColors.onSurfaceMuted : Colors.white,
             fontSize: 15,
             height: 1.4,
           ),
@@ -140,22 +159,52 @@ class _TimeRow extends StatelessWidget {
             fontSize: 11,
           ),
         ),
-        if (message.isMine) ...[
+        if (message.isMine) ...[ 
           const SizedBox(width: 4),
-          Icon(
-            message.isRead
-                ? Icons.done_all_rounded
-                : message.isDelivered
-                    ? Icons.done_all_rounded
-                    : Icons.done_rounded,
-            size:  14,
-            color: message.isRead
-                ? AppColors.primary
-                : AppColors.onSurfaceMuted,
-          ),
+          _StatusIcon(status: message.sendStatus, isRead: message.isRead),
         ],
       ],
     );
+  }
+}
+
+// ── Status icon ───────────────────────────────────────────────────────────────
+
+class _StatusIcon extends StatelessWidget {
+  const _StatusIcon({required this.status, required this.isRead});
+  final SendStatus status;
+  final bool isRead;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (status) {
+      case SendStatus.pending:
+        // Saat ikonu — gönderilmeyi bekliyor
+        return const SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.onSurfaceMuted),
+          ),
+        );
+
+      case SendStatus.failed:
+        // Kırmızı ünlem — gönderilemedi
+        return const Icon(
+          Icons.error_outline_rounded,
+          size:  14,
+          color: Colors.redAccent,
+        );
+
+      case SendStatus.sent:
+        // Çift tik (okundu/iletildi)
+        return Icon(
+          isRead ? Icons.done_all_rounded : Icons.done_all_rounded,
+          size:  14,
+          color: isRead ? AppColors.primary : AppColors.onSurfaceMuted,
+        );
+    }
   }
 }
 

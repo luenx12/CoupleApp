@@ -3,14 +3,14 @@ name: Backend Deploy to VPS
 on:
   push:
     branches:
-      - main
+      - master
     paths:
-      - 'CoupleApp.Core/**'
-      - 'CoupleApp.Infrastructure/**'
-      - 'CoupleApp.Application/**'
-      - 'CoupleApp.Backend/**'
-      - 'Dockerfile'
-      - '.github/workflows/deploy-backend.yml'
+      - "CoupleApp.Core/**"
+      - "CoupleApp.Infrastructure/**"
+      - "CoupleApp.Application/**"
+      - "CoupleApp.Backend/**"
+      - "Dockerfile"
+      - ".github/workflows/deploy-backend.yml"
 
 jobs:
   build-and-push:
@@ -52,11 +52,11 @@ jobs:
             export SENTRY_DSN="${{ secrets.SENTRY_DSN }}"
             export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
             export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
-            
+
             # Simple deploy: Pull new image -> Stop cluster -> Rebuild -> Start
             docker-compose -f docker-compose.prod.yml pull backend
             docker-compose -f docker-compose.prod.yml down
             docker-compose -f docker-compose.prod.yml up -d
-            
+
             # Prune old anonymous images to save space
             docker image prune -af

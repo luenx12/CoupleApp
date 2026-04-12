@@ -1,13 +1,16 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ChatNotifier — Riverpod state management for the chat screen
+// v2: ConnectivityService + Outbox flush bağlantısı
 // ═══════════════════════════════════════════════════════════════════════════════
 
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../../crypto/crypto_provider.dart';
 import '../../media/media_provider.dart';
+import '../../../core/services/connectivity_service.dart';
 import '../data/chat_repository.dart';
 import '../data/media_api_service.dart';
 import '../data/signalr_service.dart';
@@ -22,6 +25,7 @@ class ChatState {
     this.isLoading = false,
     this.isSending = false,
     this.isPartnerTyping = false,
+    this.isOnline = true,
     this.error,
   });
 
@@ -29,6 +33,7 @@ class ChatState {
   final bool isLoading;
   final bool isSending;
   final bool isPartnerTyping;
+  final bool isOnline;
   final String? error;
 
   ChatState copyWith({
@@ -36,6 +41,7 @@ class ChatState {
     bool? isLoading,
     bool? isSending,
     bool? isPartnerTyping,
+    bool? isOnline,
     String? error,
   }) =>
       ChatState(
@@ -43,6 +49,7 @@ class ChatState {
         isLoading:       isLoading       ?? this.isLoading,
         isSending:       isSending       ?? this.isSending,
         isPartnerTyping: isPartnerTyping ?? this.isPartnerTyping,
+        isOnline:        isOnline        ?? this.isOnline,
         error:           error,
       );
 }
@@ -67,6 +74,7 @@ final chatNotifierProvider =
     signalR:            signalR,
     accessToken:        auth.accessToken ?? '',
     dio:                dio,
+    ref:                ref,
   );
 });
 
@@ -83,6 +91,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
     required this.signalR,
     required this.accessToken,
     required this.dio,
+    required this.ref,
   }) : super(const ChatState()) {
     _init();
   }
@@ -96,8 +105,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
   final SignalRService signalR;
   final String accessToken;
   final Dio dio;
+  final Ref ref;
 
   late final ChatRepository _repo;
+  StreamSubscription<NetworkStatus>? _connectivitySub;
 
   Future<void> _init() async {
     if (myId.isEmpty || partnerId.isEmpty) return;
@@ -114,7 +125,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
     );
 
     // Register SignalR callbacks
-    signalR.onMessage      = _onIncomingMessage;
+    signalR.onMessage       = _onIncomingMessage;
     signalR.onPartnerTyping = _onPartnerTyping;
 
     // Load local messages first (instant)
@@ -124,6 +135,30 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
     // Sync from server in background
     _syncHistory();
+
+    // ── Connectivity izle ───────────────────────────────────────────────
+    _connectivitySub = ConnectivityService.instance.statusStream.listen(
+      _onConnectivityChanged,
+    );
+
+    // İlk durumu ayarla
+    final currentStatus = ConnectivityService.instance.current;
+    state = state.copyWith(isOnline: currentStatus == NetworkStatus.online);
+
+    // Eğer zaten online ise bekleyen mesajları flush et
+    if (currentStatus == NetworkStatus.online) {
+      _flushOutbox();
+    }
+  }
+
+  void _onConnectivityChanged(NetworkStatus status) {
+    if (!mounted) return;
+    final isOnline = status == NetworkStatus.online;
+    state = state.copyWith(isOnline: isOnline);
+
+    if (isOnline) {
+      _flushOutbox();
+    }
   }
 
   Future<void> _syncHistory() async {
@@ -131,6 +166,21 @@ class ChatNotifier extends StateNotifier<ChatState> {
     if (mounted) {
       state = state.copyWith(messages: synced);
     }
+  }
+
+  // ── Outbox Flush ──────────────────────────────────────────────────────────
+
+  Future<void> _flushOutbox() async {
+    await _repo.flushOutbox(onStatusChanged: _onOutboxStatusChanged);
+  }
+
+  void _onOutboxStatusChanged(String localId, SendStatus status) {
+    if (!mounted) return;
+    final updated = state.messages.map((m) {
+      if (m.id == localId) return m.copyWith(sendStatus: status);
+      return m;
+    }).toList();
+    state = state.copyWith(messages: updated);
   }
 
   // ── Send Text ─────────────────────────────────────────────────────────────
@@ -144,6 +194,9 @@ class ChatNotifier extends StateNotifier<ChatState> {
         messages:  [...state.messages, msg],
         isSending: false,
       );
+
+      // Eğer online ise hemen flush et
+      if (state.isOnline) _flushOutbox();
     } catch (e) {
       state = state.copyWith(isSending: false, error: e.toString());
     }
@@ -163,6 +216,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
         messages:  [...state.messages, msg],
         isSending: false,
       );
+      if (state.isOnline) _flushOutbox();
     } catch (e) {
       state = state.copyWith(isSending: false, error: e.toString());
     }
@@ -217,5 +271,11 @@ class ChatNotifier extends StateNotifier<ChatState> {
       state = state.copyWith(messages: updated);
     }
     return path;
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
   }
 }

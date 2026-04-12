@@ -1,4 +1,7 @@
 import 'dart:math';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../../../../core/config/app_config.dart';
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,21 +17,38 @@ class WhoIsMoreWidget extends ConsumerStatefulWidget {
 
 class _WhoIsMoreWidgetState extends ConsumerState<WhoIsMoreWidget> {
   late ConfettiController _confettiController;
-  int _currentQuestionIndex = 0;
   bool _answered = false;
-
-  final List<String> _questions = [
-    "Kim daha çok uyur?",
-    "Kim daha iyi yemek yapar?",
-    "Kim daha sakardır?",
-    "Kim daha romantiktir?",
-    "Kim daha çok para harcar?",
-  ];
+  bool _isLoading = true;
+  String? _questionId;
+  String _currentQuestionText = "Yükleniyor...";
 
   @override
   void initState() {
     super.initState();
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
+    _fetchDailyQuestion();
+  }
+
+  Future<void> _fetchDailyQuestion() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/api/MiniGames/daily-question'),
+        headers: {'Authorization': 'Bearer MOCK_TOKEN'},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _questionId = data['id'];
+          _currentQuestionText = data['questionText'];
+        });
+      } else {
+        setState(() => _currentQuestionText = "Günün sorusu bulunamadı.");
+      }
+    } catch (e) {
+      if (mounted) setState(() => _currentQuestionText = "Bağlantı hatası.");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -42,12 +62,11 @@ class _WhoIsMoreWidgetState extends ConsumerState<WhoIsMoreWidget> {
     setState(() => _answered = true);
     
     // Send to partner via SignalR
-    ref.read(gamesNotifierProvider.notifier).sendWhoIsMoreAnswer(
-      "q_$_currentQuestionIndex", 
-      answer
-    );
+    final qId = _questionId ?? "q_unknown";
+    ref.read(gamesNotifierProvider.notifier).sendWhoIsMoreAnswer(qId, answer);
 
-    // For demo: if we answer, simulate a match after 1 second or just pop confetti
+    // If partner answered we check in notifier, but frontend usually simulates or waits
+    // Backend handles real point assignment but we show visual cue
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) {
         _confettiController.play();
@@ -62,10 +81,10 @@ class _WhoIsMoreWidgetState extends ConsumerState<WhoIsMoreWidget> {
   }
 
   void _nextQuestion() {
-    setState(() {
-      _currentQuestionIndex = (_currentQuestionIndex + 1) % _questions.length;
-      _answered = false;
-    });
+    // For daily question, there is no next, so we could just refetch or do nothing.
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Günde bir soru cevaplanabilir!")),
+    );
   }
 
   @override
@@ -91,15 +110,18 @@ class _WhoIsMoreWidgetState extends ConsumerState<WhoIsMoreWidget> {
                 ),
               ),
               const SizedBox(height: 12),
-              Text(
-                _questions[_currentQuestionIndex],
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
+              if (_isLoading)
+                 const CircularProgressIndicator(color: Colors.purpleAccent)
+              else
+                Text(
+                  _currentQuestionText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
               const SizedBox(height: 24),
               if (!_answered)
                 Row(

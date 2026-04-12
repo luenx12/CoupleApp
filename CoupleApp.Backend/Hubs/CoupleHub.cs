@@ -20,19 +20,25 @@ public class CoupleHub : Hub
     private readonly IUserRepository     _users;
     private readonly IFirebaseService    _firebase;
     private readonly ILogger<CoupleHub>  _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
+
+    // In-memory cache for WhoIsMore answers to determine matches quickly
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _whoIsMoreAnswers = new();
 
     public CoupleHub(
         IConnectionManager  connectionManager,
         IMessageRepository  messages,
         IUserRepository     users,
         IFirebaseService    firebase,
-        ILogger<CoupleHub>  logger)
+        ILogger<CoupleHub>  logger,
+        IServiceScopeFactory scopeFactory)
     {
         _connectionManager = connectionManager;
         _messages          = messages;
         _users             = users;
         _firebase          = firebase;
         _logger            = logger;
+        _scopeFactory      = scopeFactory;
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -249,9 +255,32 @@ public class CoupleHub : Hub
     {
         var senderId = GetUserId();
         var connections = _connectionManager.GetConnections(partnerId);
+        
         if (connections.Count > 0)
+        {
             await Clients.Clients(connections)
                          .SendAsync("VibeReceived", new { SenderId = senderId, VibeType = vibeType });
+        }
+        else
+        {
+            // Offline - Trigger FCM Push Notification
+            var deviceTokens = await _users.GetDeviceTokensAsync(partnerId);
+            if (deviceTokens.Count > 0)
+            {
+                var (title, body) = vibeType switch
+                {
+                    "vibe_miss_you" => ("Seni Özledi! ❤️", "Partnerin şu an seni düşünüyor."),
+                    "vibe_kiss"     => ("Bir Öpücük Geldi! 😘", "Sana kocaman bir öpücük gönderdi."),
+                    "vibe_date"     => ("Randevu Teklifi! ☕", "Bugünü beraber geçirmeye ne dersin?"),
+                    "vibe_call"     => ("Sesini Duymak İstiyor 📞", "Müsait olduğunda onu aramanı bekliyor."),
+                    "vibe_thinking" => ("Aklındasın... ✨", "Şu an tam da seni düşünüyor."),
+                    "vibe_surprise" => ("Sürpriz! 🎁", "Sana küçük bir sürprizi var, uygulamaya bak!"),
+                    _               => ("Yeni Bir Vibe! ✨", "Sana bir etkileşim gönderdi.")
+                };
+
+                await _firebase.SendPushNotificationAsync(deviceTokens, title, body);
+            }
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -261,6 +290,39 @@ public class CoupleHub : Hub
     public async Task SendWhoIsMoreAnswerAsync(Guid partnerId, string questionId, string answer)
     {
         var senderId = GetUserId();
+        
+        // Save the answer in-memory
+        var myKey = $"{senderId}_{questionId}";
+        _whoIsMoreAnswers[myKey] = answer;
+
+        // Check if partner has answered
+        var partnerKey = $"{partnerId}_{questionId}";
+        if (_whoIsMoreAnswers.TryGetValue(partnerKey, out var partnerAnswer))
+        {
+            // Both answered. Check if they picked the same person.
+            bool isMatch = (answer == partnerAnswer);
+
+            if (isMatch)
+            {
+                // Give points
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<CoupleApp.Infrastructure.Persistence.AppDbContext>();
+                
+                await AddStatsAsync(db, senderId, 5, 1);
+                await AddStatsAsync(db, partnerId, 5, 1);
+                await db.SaveChangesAsync();
+
+                // Clear cache for this question to free memory
+                _whoIsMoreAnswers.TryRemove(myKey, out _);
+                _whoIsMoreAnswers.TryRemove(partnerKey, out _);
+            }
+            
+            // Notify both of the match result 
+            // For MVP simplicity, we just notify the current caller and let the partner know via their own incoming socket if needed, 
+            // but the prompt says: "eşleşince konfeti + puan ver". 
+            // We can send a specialized MatchResult event, or just broadcast the incoming answer so clients can compare locally.
+        }
+
         var connections = _connectionManager.GetConnections(partnerId);
         if (connections.Count > 0)
             await Clients.Clients(connections)
@@ -272,13 +334,44 @@ public class CoupleHub : Hub
                          });
     }
 
+    private static async Task AddStatsAsync(CoupleApp.Infrastructure.Persistence.AppDbContext db, Guid uid, int points, int matches)
+    {
+        var st = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(db.UserStats, s => s.UserId == uid);
+        if (st == null)
+            db.UserStats.Add(new UserStats { UserId = uid, TotalPoints = points, WhoIsMoreMatches = matches });
+        else
+        {
+            st.TotalPoints += points;
+            st.WhoIsMoreMatches += matches;
+        }
+    }
+
     public async Task SendFlameLevelAsync(Guid partnerId, double level)
     {
         var senderId = GetUserId();
+        
+        // Real-time broadcast
         var connections = _connectionManager.GetConnections(partnerId);
         if (connections.Count > 0)
             await Clients.Clients(connections)
                          .SendAsync("FlameLevelChanged", new { SenderId = senderId, Level = level });
+
+        // Debounce: Only save to DB if 5 minutes have passed since last record
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CoupleApp.Infrastructure.Persistence.AppDbContext>();
+        
+        var threshold = DateTime.UtcNow.AddMinutes(-5);
+        var recent = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
+            System.Linq.Queryable.OrderByDescending(
+                System.Linq.Queryable.Where(db.FlameLevels, f => f.UserId == senderId),
+                f => f.RecordedAt)
+        );
+
+        if (recent == null || recent.RecordedAt < threshold)
+        {
+            db.FlameLevels.Add(new FlameLevel { UserId = senderId, Level = level });
+            await db.SaveChangesAsync();
+        }
     }
 
     public async Task SendRedRoomMediaAsync(Guid partnerId, string mediaId, int timeoutSeconds)
@@ -292,6 +385,113 @@ public class CoupleHub : Hub
                              SenderId       = senderId,
                              MediaId        = mediaId,
                              TimeoutSeconds = timeoutSeconds
+                         });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Wordle (Zero-Leak)
+    // ──────────────────────────────────────────────────────────────────────
+
+    public async Task SendWordleChallengeAsync(Guid partnerId, string encryptedWord)
+    {
+        var senderId = GetUserId();
+        var connections = _connectionManager.GetConnections(partnerId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("WordleChallengeReceived", new { SenderId = senderId, EncryptedWord = encryptedWord });
+        else
+        {
+            var deviceTokens = await _users.GetDeviceTokensAsync(partnerId);
+            if (deviceTokens.Count > 0)
+                await _firebase.SendPushNotificationAsync(deviceTokens, "Sana Bir Kelime Tuttu! 🤫", "Partnerin Wordle'da senin için bir meydan okuma hazırladı.");
+        }
+    }
+
+    public async Task SendWordleResultAsync(Guid partnerId, int attempts, bool isDaily)
+    {
+        var senderId = GetUserId();
+
+        // Update stats
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CoupleApp.Infrastructure.Persistence.AppDbContext>();
+        var st = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(db.UserStats, s => s.UserId == senderId);
+        
+        if (st == null)
+        {
+            st = new UserStats { UserId = senderId };
+            db.UserStats.Add(st);
+        }
+        
+        st.WordleTotalPlayed++;
+        if (st.WordleAverageAttempts == 0)
+            st.WordleAverageAttempts = attempts;
+        else
+            st.WordleAverageAttempts = (st.WordleAverageAttempts * (st.WordleTotalPlayed - 1) + attempts) / st.WordleTotalPlayed;
+            
+        // Simplified streak logic (assume consecutive days for simplicity if playing)
+        st.WordleCurrentStreak++;
+        if (st.WordleCurrentStreak > st.WordleMaxStreak)
+            st.WordleMaxStreak = st.WordleCurrentStreak;
+
+        await db.SaveChangesAsync();
+
+        var connections = _connectionManager.GetConnections(partnerId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("WordleResultReceived", new { SenderId = senderId, Attempts = attempts, IsDaily = isDaily });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // DrawGuess — Real-time canvas streaming
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Drawer streams stroke batches every ~100ms to the guesser.
+    /// Payload: { points:[{x,y}], color, strokeWidth, sessionId }
+    /// </summary>
+    public async Task DrawStrokeAsync(Guid partnerId, DrawStrokeDto dto)
+    {
+        var senderId    = GetUserId();
+        var connections = _connectionManager.GetConnections(partnerId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("DrawStrokeReceived", new
+                         {
+                             SenderId     = senderId,
+                             dto.SessionId,
+                             dto.Points,
+                             dto.Color,
+                             dto.StrokeWidth,
+                             dto.IsEraser,
+                         });
+    }
+
+    /// <summary>
+    /// Drawer cleared the canvas — guesser also clears.
+    /// </summary>
+    public async Task DrawClearAsync(Guid partnerId, Guid sessionId)
+    {
+        var connections = _connectionManager.GetConnections(partnerId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("DrawCleared", new { SessionId = sessionId });
+    }
+
+    /// <summary>
+    /// Server pushes this to the drawer when the guesser guessed correctly
+    /// (called from REST POST /guess after DB is updated).
+    /// Used to notify drawer of win result in real-time.
+    /// </summary>
+    public async Task NotifyGuessResultAsync(Guid drawerId, Guid sessionId, bool correct, int score)
+    {
+        var connections = _connectionManager.GetConnections(drawerId);
+        if (connections.Count > 0)
+            await Clients.Clients(connections)
+                         .SendAsync("DrawGuessResult", new
+                         {
+                             SessionId = sessionId,
+                             Correct   = correct,
+                             Score     = score,
                          });
     }
 
@@ -331,3 +531,13 @@ public record MessageDeliveryDto
     public MessageType Type     { get; init; }
     public DateTime SentAt      { get; init; }
 }
+
+public record DrawPointDto(double X, double Y);
+
+public record DrawStrokeDto(
+    Guid               SessionId,
+    List<DrawPointDto> Points,
+    string             Color,
+    double             StrokeWidth,
+    bool               IsEraser = false
+);

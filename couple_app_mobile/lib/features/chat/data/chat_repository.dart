@@ -1,7 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ChatRepository — Bridge between DB, API and SignalR
+// v2: Offline-First Outbox Queue + Exponential Backoff Retry
 // ═══════════════════════════════════════════════════════════════════════════════
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -10,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import '../../crypto/crypto_service.dart';
 import '../../media/media_storage_service.dart';
 import '../domain/message_model.dart';
+import '../domain/outbox_message.dart';
 import 'chat_database.dart';
 import 'media_api_service.dart';
 import 'signalr_service.dart';
@@ -39,6 +42,11 @@ class ChatRepository {
 
   final _db   = ChatDatabase.instance;
   final _uuid = const Uuid();
+
+  static const int _maxRetries = 5;
+
+  /// Flush işlemi çalışıyor mu? paralel flush önlemek için.
+  bool _flushing = false;
 
   // ── Veritabanından mesajları yükle ──────────────────────────────────────
 
@@ -82,6 +90,7 @@ class ChatRepository {
           isRead:       raw['isRead'] as bool? ?? false,
           isDelivered:  raw['isDelivered'] as bool? ?? false,
           remoteMediaId: raw['mediaId'] as String?,
+          sendStatus:   SendStatus.sent,
         );
 
         await _db.insertMessage(msg);
@@ -94,7 +103,7 @@ class ChatRepository {
     }
   }
 
-  // ── Metin mesajı gönder ─────────────────────────────────────────────────
+  // ── Metin mesajı gönder (offline-first) ────────────────────────────────
 
   Future<MessageModel> sendTextMessage(String text) async {
     // 1. İki kopya şifrele (alıcı + gönderici için)
@@ -108,7 +117,7 @@ class ChatRepository {
 
     final tempId = _uuid.v4();
 
-    // 2. Optimistik UI için DB'ye kaydet
+    // 2. Optimistik UI için DB'ye kaydet (pending)
     final msg = MessageModel(
       id:          tempId,
       senderId:    myId,
@@ -118,16 +127,20 @@ class ChatRepository {
       sentAt:      DateTime.now(),
       isMine:      true,
       isDelivered: false,
+      sendStatus:  SendStatus.pending,
     );
     await _db.insertMessage(msg);
 
-    // 3. SignalR üzerinden gönder
-    await signalR.sendMessage(
-      receiverId:            partnerId,
-      encryptedText:         forPartner.toBase64(),
+    // 3. Outbox'a yaz
+    final outbox = OutboxMessage(
+      localId:                tempId,
+      encryptedText:          forPartner.toBase64(),
       encryptedTextForSender: forSelf.toBase64(),
-      type:                  0, // text
+      iv:                     '',
+      type:                   0,
+      createdAt:              msg.sentAt,
     );
+    await _db.insertOutbox(outbox);
 
     return msg;
   }
@@ -149,10 +162,9 @@ class ChatRepository {
 
     // 2. Kendi kopyamızı yerel .aes olarak kaydet
     final selfPath = await mediaStorage.saveEncryptedMediaForSelf(
-      rawBytes: rawBytes, // zeroFill edilecek
+      rawBytes: rawBytes,
       fileId:   fileId,
     );
-    // rawBytes artık sıfırlandı
 
     // 3. Sunucu mesaj kaydı için minimal metin
     final forPartner = crypto.encrypt(
@@ -163,7 +175,7 @@ class ChatRepository {
       Uint8List.fromList(utf8.encode('[image]')),
     );
 
-    // 4. DB'ye kaydet
+    // 4. DB'ye kaydet (pending)
     final msg = MessageModel(
       id:             fileId,
       senderId:       myId,
@@ -174,19 +186,91 @@ class ChatRepository {
       isMine:         true,
       localMediaPath: selfPath,
       remoteMediaId:  mediaId,
+      sendStatus:     SendStatus.pending,
     );
     await _db.insertMessage(msg);
 
-    // 5. SignalR ile bildir
-    await signalR.sendMessage(
-      receiverId:            partnerId,
-      encryptedText:         forPartner.toBase64(),
+    // 5. Outbox'a yaz
+    final outbox = OutboxMessage(
+      localId:                fileId,
+      encryptedText:          forPartner.toBase64(),
       encryptedTextForSender: forSelf.toBase64(),
-      mediaId:               mediaId,
-      type:                  1, // image
+      iv:                     '',
+      mediaId:                mediaId,
+      type:                   1,
+      createdAt:              msg.sentAt,
     );
+    await _db.insertOutbox(outbox);
 
     return msg;
+  }
+
+  // ── Outbox Flush — bağlantı gelince çağrılır ────────────────────────────
+
+  /// Tüm pending outbox mesajlarını sırayla SignalR'a gönderir.
+  /// Exponential backoff: 1s, 2s, 4s, 8s, 16s → max [_maxRetries] deneme.
+  Future<void> flushOutbox({
+    required void Function(String localId, SendStatus status) onStatusChanged,
+  }) async {
+    if (_flushing) return;
+    _flushing = true;
+
+    try {
+      final pending = await _db.getPendingOutbox();
+
+      for (final item in pending) {
+        await _trySend(item, onStatusChanged: onStatusChanged);
+      }
+    } finally {
+      _flushing = false;
+    }
+  }
+
+  Future<void> _trySend(
+    OutboxMessage item, {
+    required void Function(String localId, SendStatus status) onStatusChanged,
+  }) async {
+    final currentRetry = item.retryCount;
+
+    if (currentRetry >= _maxRetries) {
+      // Max retry aşıldı → kalıcı hata
+      await _db.markOutboxFailed(item.localId);
+      await _db.updateSendStatus(item.localId, SendStatus.failed);
+      onStatusChanged(item.localId, SendStatus.failed);
+      return;
+    }
+
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+    if (currentRetry > 0) {
+      final delayMs = (1000 * (1 << (currentRetry - 1))).clamp(0, 16000);
+      await Future.delayed(Duration(milliseconds: delayMs));
+    }
+
+    try {
+      await signalR.sendMessage(
+        receiverId:             partnerId,
+        encryptedText:          item.encryptedText,
+        encryptedTextForSender: item.encryptedTextForSender,
+        mediaId:                item.mediaId,
+        type:                   item.type,
+      );
+
+      // Başarılı → outbox'tan sil, mesaj durumunu güncelle
+      await _db.markOutboxSent(item.localId);
+      await _db.updateSendStatus(item.localId, SendStatus.sent);
+      onStatusChanged(item.localId, SendStatus.sent);
+    } catch (_) {
+      // Başarısız → retry sayısını artır, bir sonraki flush'ta tekrar dene
+      await _db.incrementOutboxRetry(item.localId);
+
+      final newRetry = currentRetry + 1;
+      if (newRetry >= _maxRetries) {
+        await _db.markOutboxFailed(item.localId);
+        await _db.updateSendStatus(item.localId, SendStatus.failed);
+        onStatusChanged(item.localId, SendStatus.failed);
+      }
+      // Henüz max değilse pending kalır, bir sonraki flushta tekrar denenecek
+    }
   }
 
   // ── Gelen mesajı işle ───────────────────────────────────────────────────
@@ -199,7 +283,6 @@ class ChatRepository {
     final msgId    = dto['messageId'] as String? ?? _uuid.v4();
 
     String plainText = '';
-    String? localPath;
 
     if (type == MsgType.text && encText.isNotEmpty) {
       try {
@@ -209,7 +292,6 @@ class ChatRepository {
         plainText = '[şifre çözülemedi]';
       }
     } else if (type == MsgType.image && mediaId != null) {
-      // Medya mesajı — sadece remoteMediaId saklıyoruz, lazy download yapılacak
       plainText = '';
     }
 
@@ -221,8 +303,9 @@ class ChatRepository {
       type:          type,
       sentAt:        DateTime.now(),
       isMine:        false,
-      localMediaPath: localPath,
+      localMediaPath: null,
       remoteMediaId: mediaId,
+      sendStatus:    SendStatus.sent,
     );
 
     await _db.insertMessage(msg);

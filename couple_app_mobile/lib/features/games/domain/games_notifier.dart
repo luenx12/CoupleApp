@@ -7,26 +7,35 @@ class GamesState {
     this.partnerFlameLevel = 0.0,
     this.incomingMediaId,
     this.mediaTimeoutSeconds = 10,
-    this.whoIsMoreMatches = const [], // Sadece UI için match history
+    this.whoIsMoreMatches = const [],
+    this.wordlePartnerAttempts,
+    this.wordleChallengeWord,
   });
 
   final double partnerFlameLevel;
   final String? incomingMediaId;
   final int mediaTimeoutSeconds;
   final List<String> whoIsMoreMatches;
+  final int? wordlePartnerAttempts;
+  final String? wordleChallengeWord;
 
   GamesState copyWith({
     double? partnerFlameLevel,
     String? incomingMediaId,
     int? mediaTimeoutSeconds,
     List<String>? whoIsMoreMatches,
+    int? wordlePartnerAttempts,
+    String? wordleChallengeWord,
     bool clearMedia = false,
+    bool clearWordleChallenge = false,
   }) {
     return GamesState(
       partnerFlameLevel: partnerFlameLevel ?? this.partnerFlameLevel,
       incomingMediaId: clearMedia ? null : (incomingMediaId ?? this.incomingMediaId),
       mediaTimeoutSeconds: mediaTimeoutSeconds ?? this.mediaTimeoutSeconds,
       whoIsMoreMatches: whoIsMoreMatches ?? this.whoIsMoreMatches,
+      wordlePartnerAttempts: wordlePartnerAttempts ?? this.wordlePartnerAttempts,
+      wordleChallengeWord: clearWordleChallenge ? null : (wordleChallengeWord ?? this.wordleChallengeWord),
     );
   }
 }
@@ -70,6 +79,21 @@ class GamesNotifier extends StateNotifier<GamesState> {
         );
       }
     };
+    
+    signalR.onWordleChallengeReceived = (senderId, encryptedWord) {
+      final myPartnerId = ref.read(authNotifierProvider).partnerId;
+      if (senderId == myPartnerId && mounted) {
+         // UI can show a dialog or notification: Partner sent you a challenge!
+         state = state.copyWith(wordleChallengeWord: encryptedWord);
+      }
+    };
+
+    signalR.onWordleResultReceived = (senderId, attempts, isDaily) {
+      final myPartnerId = ref.read(authNotifierProvider).partnerId;
+      if (senderId == myPartnerId && mounted) {
+        state = state.copyWith(wordlePartnerAttempts: attempts);
+      }
+    };
   }
 
   Future<void> sendFlameLevel(double level) async {
@@ -93,7 +117,25 @@ class GamesNotifier extends StateNotifier<GamesState> {
     }
   }
 
+  Future<void> sendWordleChallenge(String encryptedWord) async {
+    final partnerId = ref.read(authNotifierProvider).partnerId;
+    if (partnerId != null) {
+      await ref.read(signalRServiceProvider).sendWordleChallenge(partnerId, encryptedWord);
+    }
+  }
+  
+  Future<void> sendWordleResult(int attempts, bool isDaily) async {
+    final partnerId = ref.read(authNotifierProvider).partnerId;
+    if (partnerId != null) {
+      await ref.read(signalRServiceProvider).sendWordleResult(partnerId, attempts, isDaily);
+    }
+  }
+
   void clearIncomingMedia() {
     state = state.copyWith(clearMedia: true);
+  }
+  
+  void clearIncomingWordleChallenge() {
+    state = state.copyWith(clearWordleChallenge: true);
   }
 }

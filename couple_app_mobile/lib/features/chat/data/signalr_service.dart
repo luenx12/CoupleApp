@@ -33,6 +33,15 @@ typedef WhoIsMoreHandler = void Function(String senderId, String questionId, Str
 typedef FlameLevelHandler = void Function(String senderId, double level);
 typedef RedRoomMediaHandler = void Function(String senderId, String mediaId, int timeoutSeconds);
 
+// Wordle handlers
+typedef WordleChallengeHandler = void Function(String senderId, String encryptedWord);
+typedef WordleResultHandler = void Function(String senderId, int attempts, bool isDaily);
+
+// DrawGame handlers
+typedef DrawStrokeHandler = void Function(Map<String, dynamic> dto);
+typedef DrawClearHandler = void Function(Map<String, dynamic> dto);
+typedef DrawGuessResultHandler = void Function(Map<String, dynamic> dto);
+
 class SignalRService {
   SignalRService(this._ref);
 
@@ -52,6 +61,13 @@ class SignalRService {
   WhoIsMoreHandler? onWhoIsMoreAnswered;
   FlameLevelHandler? onFlameLevelChanged;
   RedRoomMediaHandler? onRedRoomMediaReceived;
+  WordleChallengeHandler? onWordleChallengeReceived;
+  WordleResultHandler? onWordleResultReceived;
+  
+  // DrawGame Callbacks
+  DrawStrokeHandler? onDrawStrokeReceived;
+  DrawClearHandler? onDrawCleared;
+  DrawGuessResultHandler? onDrawGuessResult;
 
   // ── Connect ───────────────────────────────────────────────────────────────
 
@@ -180,6 +196,46 @@ class SignalRService {
       final timeoutSeconds = raw?['timeoutSeconds'] as int? ?? 10;
       onRedRoomMediaReceived?.call(senderId, mediaId, timeoutSeconds);
     });
+    
+    _hub!.on('WordleChallengeReceived', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args[0] as Map?;
+      final senderId = raw?['senderId']?.toString() ?? '';
+      final word = raw?['encryptedWord']?.toString() ?? '';
+      onWordleChallengeReceived?.call(senderId, word);
+    });
+
+    _hub!.on('WordleResultReceived', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args[0] as Map?;
+      final senderId = raw?['senderId']?.toString() ?? '';
+      final attempts = raw?['attempts'] as int? ?? 0;
+      final isDaily = raw?['isDaily'] as bool? ?? true;
+      onWordleResultReceived?.call(senderId, attempts, isDaily);
+    });
+    
+    // ── DrawGame Events ─────────────────────────────────────────────────────
+    
+    _hub!.on('DrawStrokeReceived', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args[0];
+      final dto = (raw is Map) ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      onDrawStrokeReceived?.call(dto);
+    });
+
+    _hub!.on('DrawCleared', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args[0];
+      final dto = (raw is Map) ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      onDrawCleared?.call(dto);
+    });
+
+    _hub!.on('DrawGuessResult', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args[0];
+      final dto = (raw is Map) ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      onDrawGuessResult?.call(dto);
+    });
 
     // ── Start ────────────────────────────────────────────────────────────
 
@@ -262,6 +318,28 @@ class SignalRService {
   Future<void> sendRedRoomMedia(String partnerId, String mediaId, int timeoutSeconds) async {
     if (_hub?.state != HubConnectionState.Connected) return;
     await _hub!.invoke('SendRedRoomMediaAsync', args: [partnerId, mediaId, timeoutSeconds]);
+  }
+
+  Future<void> sendWordleChallenge(String partnerId, String encryptedWord) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('SendWordleChallengeAsync', args: [partnerId, encryptedWord]);
+  }
+
+  Future<void> sendWordleResult(String partnerId, int attempts, bool isDaily) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('SendWordleResultAsync', args: [partnerId, attempts, isDaily]);
+  }
+
+  // ── DrawGame Sends ────────────────────────────────────────────────────────
+
+  Future<void> sendDrawStroke(String partnerId, Map<String, dynamic> dto) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('DrawStrokeAsync', args: [partnerId, dto]);
+  }
+
+  Future<void> sendDrawClear(String partnerId, String sessionId) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('DrawClearAsync', args: [partnerId, sessionId]);
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────

@@ -92,4 +92,47 @@ public sealed class UserRepository : Repository<User>, IUserRepository
             t.ReplacedByToken = "REVOKED_MANUAL";
         }
     }
+
+    // ── FCM Push Notifications ─────────────────────────────────────────
+
+    public async Task UpsertDeviceTokenAsync(Guid userId, string token, string platform)
+    {
+        var db = (AppDbContext)_context;
+        // Check if token already exists
+        var existing = await db.DeviceTokens.FirstOrDefaultAsync(dt => dt.Token == token);
+        if (existing is not null)
+        {
+            // If it belongs to someone else, reassign
+            existing.UserId = userId;
+            existing.Platform = platform;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            await db.DeviceTokens.AddAsync(new DeviceToken
+            {
+                UserId = userId,
+                Token = token,
+                Platform = platform
+            });
+        }
+    }
+
+    public async Task<List<string>> GetDeviceTokensAsync(Guid userId)
+    {
+        return await ((AppDbContext)_context).DeviceTokens
+            .Where(dt => dt.UserId == userId)
+            .Select(dt => dt.Token)
+            .ToListAsync();
+    }
+
+    public async Task RemoveDeviceTokensAsync(List<string> tokens)
+    {
+        var db = (AppDbContext)_context;
+        var toRemove = await db.DeviceTokens.Where(dt => tokens.Contains(dt.Token)).ToListAsync();
+        if (toRemove.Count > 0)
+        {
+            db.DeviceTokens.RemoveRange(toRemove);
+        }
+    }
 }

@@ -60,6 +60,11 @@ dependencies:
   confetti: ^0.8.0
   video_player: ^2.10.1
 
+  # ── Aşama 6: FCM Push Notifications ───────────────────────────────────
+  firebase_core: ^2.32.0
+  firebase_messaging: ^14.9.4
+  flutter_local_notifications: ^17.1.2
+
 
 dev_dependencies:
   flutter_test:

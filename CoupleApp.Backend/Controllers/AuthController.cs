@@ -178,6 +178,16 @@ public class AuthController : ControllerBase
         return Ok();
     }
 
+    [HttpPost("device-token")]
+    [Authorize]
+    public async Task<IActionResult> UpdateDeviceToken([FromBody] DeviceTokenDto dto)
+    {
+        var userId = GetUserId();
+        await _users.UpsertDeviceTokenAsync(userId, dto.Token, dto.Platform);
+        await _users.SaveChangesAsync();
+        return Ok();
+    }
+
     // ──────────────────────────────────────────────────────────────────────
 
     private string GenerateJwt(User user)
@@ -224,3 +234,4 @@ public class AuthController : ControllerBase
 public record RegisterDto(string Username, string Password, string? PublicKey);
 public record LoginDto(string Username, string Password);
 public record RefreshDto(string RefreshToken);
+public record DeviceTokenDto(string Token, string Platform);

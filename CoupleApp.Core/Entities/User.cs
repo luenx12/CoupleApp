@@ -27,4 +27,5 @@ public class User
     public ICollection<Activity> Activities { get; set; } = [];
     public ICollection<GameTask> GameTasks { get; set; } = [];
     public ICollection<RefreshToken> RefreshTokens { get; set; } = [];
+    public ICollection<DeviceToken> DeviceTokens { get; set; } = [];
 }

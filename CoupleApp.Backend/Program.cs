@@ -67,7 +67,8 @@ builder.Services.AddSignalR(options =>
 // ════════════════════════════════════════════════════════════════════
 //  4. SINGLETON SERVICES
 // ════════════════════════════════════════════════════════════════════
-builder.Services.AddSingleton<IConnectionManager, ConnectionManager>(); // shared connection state
+builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
+builder.Services.AddSingleton<IFirebaseService, FirebaseService>();
 
 // ════════════════════════════════════════════════════════════════════
 //  5. CONTROLLERS + SWAGGER

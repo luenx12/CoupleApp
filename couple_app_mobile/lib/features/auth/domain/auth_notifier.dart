@@ -2,8 +2,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
+import 'dart:io';
 import 'auth_state.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/services/firebase_messaging_service.dart';
 
 final localAuthProvider  = Provider<LocalAuthentication>((_) => LocalAuthentication());
 
@@ -144,6 +146,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
     // Partner bilgisini arka planda yükle
     await _fetchPartner(token);
+    await _registerDeviceToken(token);
   }
 
   Future<void> login(String username, String password) async {
@@ -166,6 +169,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       // Partner bilgisini yükle
       await _fetchPartner(token);
+      await _registerDeviceToken(token);
     } on DioException catch (e) {
       state = state.copyWith(
           errorMessage: e.response?.data?.toString() ?? 'Giriş başarısız.');
@@ -193,6 +197,36 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     await _storage.deleteAll();
     state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+
+  Future<void> _registerDeviceToken(String? accessToken) async {
+    if (accessToken == null) return;
+    try {
+      final fcmService = FirebaseMessagingService();
+      await fcmService.initialize();
+      final deviceToken = await fcmService.getToken();
+      
+      if (deviceToken != null) {
+        final platform = Platform.isIOS ? 'ios' : 'android';
+        await _dio.post('/Auth/device-token', data: {
+          'token': deviceToken,
+          'platform': platform
+        });
+      }
+
+      // Background listener for token rotation silently updating backend
+      fcmService.onTokenRefresh.listen((newToken) async {
+        try {
+          final platform = Platform.isIOS ? 'ios' : 'android';
+          await _dio.post('/Auth/device-token', data: {
+            'token': newToken,
+            'platform': platform
+          });
+        } catch (_) {}
+      });
+    } catch (_) {
+      // Non-blocking fallback if Firebase throws exceptions
+    }
   }
 
   Future<void> _fetchPartner(String? token) async {

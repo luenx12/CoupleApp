@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
 
     // Auth
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<DeviceToken> DeviceTokens => Set<DeviceToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -135,6 +136,18 @@ public class AppDbContext : DbContext
             entity.HasOne(rt => rt.User)
                   .WithMany(u => u.RefreshTokens)
                   .HasForeignKey(rt => rt.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── Device Tokens ─────────────────────────────────────────────────
+        modelBuilder.Entity<DeviceToken>(entity =>
+        {
+            entity.HasKey(dt => dt.Id);
+            entity.HasIndex(dt => dt.Token).IsUnique(); // Ensure no duplicates globally
+
+            entity.HasOne(dt => dt.User)
+                  .WithMany(u => u.DeviceTokens)
+                  .HasForeignKey(dt => dt.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
     }

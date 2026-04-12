@@ -125,3 +125,12 @@ C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\CoupleApp.Inf
 C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\CoupleApp.Application.pdb
 C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\CoupleApp.Infrastructure.pdb
 C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\CoupleApp.Core.pdb
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\appsettings.Production.json
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\FirebaseAdmin.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\Google.Api.Gax.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\Google.Api.Gax.Rest.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\Google.Apis.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\Google.Apis.Auth.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\Google.Apis.Core.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\System.Management.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Backend\bin\Debug\net8.0\runtimes\win\lib\net7.0\System.Management.dll

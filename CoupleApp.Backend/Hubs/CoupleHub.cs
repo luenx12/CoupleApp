@@ -18,17 +18,20 @@ public class CoupleHub : Hub
     private readonly IConnectionManager  _connectionManager;
     private readonly IMessageRepository  _messages;
     private readonly IUserRepository     _users;
+    private readonly IFirebaseService    _firebase;
     private readonly ILogger<CoupleHub>  _logger;
 
     public CoupleHub(
         IConnectionManager  connectionManager,
         IMessageRepository  messages,
         IUserRepository     users,
+        IFirebaseService    firebase,
         ILogger<CoupleHub>  logger)
     {
         _connectionManager = connectionManager;
         _messages          = messages;
         _users             = users;
+        _firebase          = firebase;
         _logger            = logger;
     }
 
@@ -108,7 +111,7 @@ public class CoupleHub : Hub
             SentAt        = message.SentAt
         };
 
-        // 5. Deliver to receiver if online
+        // 5. Deliver to receiver if online, else push notification
         var receiverConnections = _connectionManager.GetConnections(dto.ReceiverId);
         if (receiverConnections.Count > 0)
         {
@@ -118,6 +121,24 @@ public class CoupleHub : Hub
             message.IsDelivered = true;
             message.DeliveredAt = DateTime.UtcNow;
             await _messages.SaveChangesAsync();
+        }
+        else
+        {
+            // Offline - Trigger FCM Push Notification
+            var deviceTokens = await _users.GetDeviceTokensAsync(dto.ReceiverId);
+            if (deviceTokens.Count > 0)
+            {
+                // Zero-Leak safe generic text mapping
+                string pushBody = dto.Type switch 
+                {
+                    MessageType.Image => "Sana bir fotoğraf gönderdi 📸",
+                    MessageType.Voice => "Sana bir ses kaydı gönderdi 🎤",
+                    MessageType.Sticker => "Sana bir çıkartma gönderdi ✨",
+                    _ => "Yeni mesajın var 💌"
+                };
+
+                await _firebase.SendPushNotificationAsync(deviceTokens, "CoupleApp", pushBody);
+            }
         }
 
         // 6. Acknowledge to sender

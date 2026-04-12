@@ -121,6 +121,38 @@ namespace CoupleApp.Backend.Migrations
                     b.ToTable("CouplePairs");
                 });
 
+            modelBuilder.Entity("CoupleApp.Core.Entities.DeviceToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("DeviceTokens");
+                });
+
             modelBuilder.Entity("CoupleApp.Core.Entities.GalleryItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -379,6 +411,17 @@ namespace CoupleApp.Backend.Migrations
                     b.Navigation("User2");
                 });
 
+            modelBuilder.Entity("CoupleApp.Core.Entities.DeviceToken", b =>
+                {
+                    b.HasOne("CoupleApp.Core.Entities.User", "User")
+                        .WithMany("DeviceTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("CoupleApp.Core.Entities.GalleryItem", b =>
                 {
                     b.HasOne("CoupleApp.Core.Entities.User", "Receiver")
@@ -450,6 +493,8 @@ namespace CoupleApp.Backend.Migrations
             modelBuilder.Entity("CoupleApp.Core.Entities.User", b =>
                 {
                     b.Navigation("Activities");
+
+                    b.Navigation("DeviceTokens");
 
                     b.Navigation("GameTasks");
 

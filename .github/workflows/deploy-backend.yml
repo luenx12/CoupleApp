@@ -75,6 +75,6 @@ jobs:
             export DOCKERHUB_USERNAME='${{ secrets.DOCKERHUB_USERNAME }}'
 
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml down -v
+            docker compose -f docker-compose.prod.yml down
             docker compose -f docker-compose.prod.yml up -d
             docker image prune -af

@@ -29,13 +29,13 @@ builder.Services
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer           = true,
-            ValidateAudience         = true,
-            ValidateLifetime         = true,
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer              = builder.Configuration["Jwt:Issuer"],
-            ValidAudience            = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
         };
 
         // Allow JWT via query-string for SignalR WebSocket connections
@@ -44,7 +44,7 @@ builder.Services
             OnMessageReceived = ctx =>
             {
                 var token = ctx.Request.Query["access_token"].ToString();
-                var path  = ctx.HttpContext.Request.Path;
+                var path = ctx.HttpContext.Request.Path;
                 if (!string.IsNullOrEmpty(token) && path.StartsWithSegments("/hubs/couple"))
                     ctx.Token = token;
                 return Task.CompletedTask;
@@ -60,8 +60,8 @@ builder.Services.AddAuthorization();
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = builder.Environment.IsDevelopment();
-    options.KeepAliveInterval    = TimeSpan.FromSeconds(15);
-    options.ClientTimeoutInterval= TimeSpan.FromSeconds(30);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -80,19 +80,19 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title       = "CoupleApp API",
-        Version     = "v1",
+        Title = "CoupleApp API",
+        Version = "v1",
         Description = "Zero-Leak E2EE Couple Application Backend — Clean Architecture"
     });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Name         = "Authorization",
-        Type         = SecuritySchemeType.Http,
-        Scheme       = "bearer",
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
         BearerFormat = "JWT",
-        In           = ParameterLocation.Header,
-        Description  = "Enter your JWT token (without 'Bearer' prefix)"
+        In = ParameterLocation.Header,
+        Description = "Enter your JWT token (without 'Bearer' prefix)"
     });
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
@@ -135,15 +135,14 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ── Middleware pipeline ──────────────────────────────────────────
-if (app.Environment.IsDevelopment())
+
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "CoupleApp API v1");
-        c.RoutePrefix = "swagger";
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CoupleApp API v1");
+    c.RoutePrefix = "swagger";
+});
+
 
 app.UseCors("DevPolicy");
 app.UseAuthentication();

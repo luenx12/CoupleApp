@@ -68,11 +68,11 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd /opt/coupleapp
-            export JWT_SECRET="${{ secrets.JWT_SECRET }}"
-            export FCM_KEY="${{ secrets.FCM_KEY }}"
-            export SENTRY_DSN="${{ secrets.SENTRY_DSN }}"
-            export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
-            export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+            export JWT_SECRET='${{ secrets.JWT_SECRET }}'
+            export FCM_KEY='${{ secrets.FCM_KEY }}'
+            export SENTRY_DSN='${{ secrets.SENTRY_DSN }}'
+            export DB_PASSWORD='${{ secrets.DB_PASSWORD }}'
+            export DOCKERHUB_USERNAME='${{ secrets.DOCKERHUB_USERNAME }}'
 
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml down -v

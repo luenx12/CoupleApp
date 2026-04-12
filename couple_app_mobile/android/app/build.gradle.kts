@@ -23,7 +23,8 @@ android {
 
     defaultConfig {
         applicationId = "com.coupleapp.couple_app_mobile"
-        minSdk = flutter.minSdkVersion
+        
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -43,6 +44,6 @@ flutter {
 
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.12.0"))
-    
+
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
 }

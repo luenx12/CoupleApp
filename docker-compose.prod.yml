@@ -34,6 +34,8 @@ services:
       
       # appsettings içindeki Jwt:Secret kısmını günceller:
       - Jwt__Secret=${JWT_SECRET}
+      - Jwt__Issuer=CoupleApp.Backend
+      - Jwt__Audience=CoupleApp.Client
       
       # appsettings içindeki Sentry:Dsn kısmını günceller:
       - Sentry__Dsn=${SENTRY_DSN}

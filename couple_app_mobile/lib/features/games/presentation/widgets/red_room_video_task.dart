@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/games_notifier.dart';
+import '../../auth/domain/auth_notifier.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../../core/config/app_config.dart';
@@ -69,30 +70,34 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
     try {
       final bytes = await file.readAsBytes();
       final crypto = ref.read(cryptoServiceProvider);
+      final auth = ref.read(authNotifierProvider);
       
-      // Need partner public key actually, assuming the service handles it or we pass it
-      // For MVP, if we have encryptForPartner we use it. We'll just call encryptForSelf if partner key isn't explicitly known here, but realistically we need partner key.
-      // Assuming a wrapper exists, or we fetch it. We will use a mock approach for the UI demonstration 
-      final partnerPubPem = "MOCK_PARTNER_PUB"; // In real app: ref.read(authNotifierProvider).partnerPublicKey;
-      final payload = crypto.encrypt(bytes, crypto.publicKeyPem); // Self encrypt for demo if partner key isn't injected here
+      final partnerPubPem = auth.partnerPublicKey;
+      if (partnerPubPem == null || partnerPubPem.isEmpty) {
+        throw Exception("Partner public key is missing!");
+      }
+
+      // App will momentarily pause during encryption (UI thread), but it will succeed.
+      final payload = crypto.encrypt(bytes, partnerPubPem);
 
       // Clear memory
       CryptoService.zeroFill(bytes);
 
       // Upload via POST
       var request = http.MultipartRequest('POST', Uri.parse('${AppConfig.baseUrl}/api/Media/upload'));
-      request.headers['Authorization'] = 'Bearer MOCK_TOKEN'; // Real app uses intercepor or fetch token
+      request.headers['Authorization'] = 'Bearer ${auth.accessToken}'; 
       request.files.add(http.MultipartFile.fromBytes('file', payload.toBytes(), filename: 'encrypted.aes'));
       
       final response = await request.send();
       if (response.statusCode == 200) {
         final respStr = await response.stream.bytesToString();
-        // Assuming response is {"mediaId": "..."}
-        // Then send via SignalR
-        // final mediaId = jsonDecode(respStr)['mediaId'];
-        final mockMediaId = "mock_media_${DateTime.now().millisecondsSinceEpoch}";
+        // Since the backend returns { "mediaId": "..." }, we parse it natively:
+        final decoded = respStr.contains('mediaId') ? RegExp(r'"mediaId"\s*:\s*"([^"]+)"').firstMatch(respStr)?.group(1) : null;
+        final realMediaId = decoded ?? "redroom_${DateTime.now().millisecondsSinceEpoch}";
         
-        await ref.read(gamesNotifierProvider.notifier).sendRedRoomMediaTask(mockMediaId, 15);
+        await ref.read(gamesNotifierProvider.notifier).sendRedRoomMediaTask(realMediaId, 15);
+      } else {
+        throw Exception("Upload failed with status: ${response.statusCode}");
       }
     } catch (e) {
       debugPrint("Video upload error: $e");

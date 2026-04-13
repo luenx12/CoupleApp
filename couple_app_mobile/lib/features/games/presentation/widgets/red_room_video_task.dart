@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/games_notifier.dart';
-import '../../auth/domain/auth_notifier.dart';
+import '../../../auth/domain/auth_notifier.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../../core/config/app_config.dart';

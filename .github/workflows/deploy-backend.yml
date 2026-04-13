@@ -66,17 +66,21 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: JWT_SECRET,FCM_KEY,SENTRY_DSN,DB_PASSWORD,DOCKERHUB_USERNAME
           script: |
             cd /opt/coupleapp
 
-            # .env dosyasını güvenli şekilde yaz (tırnak içinde, özel karakterler sorun çıkarmaz)
-            printf 'JWT_SECRET=%s\n' "$JWT_SECRET" > .env
-            printf 'DB_PASSWORD=%s\n' "$DB_PASSWORD" >> .env
-            printf 'SENTRY_DSN=%s\n' "$SENTRY_DSN" >> .env
-            printf 'DOCKERHUB_USERNAME=%s\n' "$DOCKERHUB_USERNAME" >> .env
-            # Firebase:ServerKey -> ASP.NET Core env format: Firebase__ServerKey
-            printf 'Firebase__ServerKey=%s\n' "$FCM_KEY" >> .env
+            # .env dosyasını doğrudan GitHub Actions secret değerleriyle yaz
+            # (GitHub Actions bu değerleri SSH sunucusuna göndermeden önce genişletir)
+            cat > .env << 'EOF'
+            DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+            Firebase__ServerKey=${{ secrets.FCM_KEY }}
+            EOF
+
+            # Baştaki boşlukları temizle (heredoc indentation sorunu)
+            sed -i 's/^[[:space:]]*//' .env
 
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml down

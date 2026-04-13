@@ -63,7 +63,7 @@ class DrawGameNotifier extends StateNotifier<DrawGameState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final queryParams = difficulty != null ? {'difficulty': difficulty} : null;
-      final response = await dio.get('/api/games/draw/words', queryParameters: queryParams);
+      final response = await dio.get('/games/draw/words', queryParameters: queryParams);
       final list = (response.data as List).cast<Map<String, dynamic>>();
       
       final options = list.map((m) => DrawWordOption.fromMap(m)).toList();
@@ -81,7 +81,7 @@ class DrawGameNotifier extends StateNotifier<DrawGameState> {
   Future<void> selectWord(String wordId) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final response = await dio.post('/api/games/draw/start', data: {
+      final response = await dio.post('/games/draw/start', data: {
         'guesserId': partnerId,
         'wordId': wordId,
       });
@@ -169,7 +169,7 @@ class DrawGameNotifier extends StateNotifier<DrawGameState> {
     
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final response = await dio.post('/api/games/draw/guess', data: {
+      final response = await dio.post('/games/draw/guess', data: {
         'sessionId': state.sessionId,
         'guess': state.guessText,
       });
@@ -270,7 +270,7 @@ class DrawGameNotifier extends StateNotifier<DrawGameState> {
     // The drawer informs the server about the timeout
     if (state.role == DrawRole.drawer && state.sessionId != null) {
       try {
-        await dio.post('/api/games/draw/timeout', data: {
+        await dio.post('/games/draw/timeout', data: {
           'sessionId': state.sessionId,
         });
       } catch (e) {

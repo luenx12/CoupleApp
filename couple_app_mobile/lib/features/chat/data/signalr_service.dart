@@ -82,7 +82,7 @@ class SignalRService {
         options: HttpConnectionOptions(
           accessTokenFactory: () async {
             const storage = FlutterSecureStorage();
-            return await storage.read(key: 'access_token');
+            return await storage.read(key: 'access_token') ?? accessToken;
           },
           transport: kIsWeb ? null : HttpTransportType.WebSockets,
           skipNegotiation: kIsWeb ? false : true,

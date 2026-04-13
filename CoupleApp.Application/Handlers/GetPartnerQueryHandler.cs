@@ -17,10 +17,19 @@ public class GetPartnerQueryHandler : IRequestHandler<GetPartnerQuery, UserDto?>
     {
         var pair = await _users.GetPairByUserIdAsync(request.UserId);
         
-        if (pair is null) return null;
+        CoupleApp.Core.Entities.User? partner = null;
 
-        // Partner is whichever user is NOT the requesting user
-        var partner = pair.User1Id == request.UserId ? pair.User2 : pair.User1;
+        if (pair is not null)
+        {
+            partner = pair.User1Id == request.UserId ? pair.User2 : pair.User1;
+        }
+        else
+        {
+            // OTO EŞLEŞTİRME (FALLBACK): Henüz mobil uygulamada davet kodu vs. ekranı
+            // olmadığı için (sadece 2 kişi kullanacak mantığıyla) eğer kişi pair olmamışsa
+            // veritabanındaki "kendisi dışındaki diğer kaydı" partner olarak kabul et.
+            partner = await _users.GetPartnerAsync(request.UserId);
+        }
 
         if (partner is null) return null;
 

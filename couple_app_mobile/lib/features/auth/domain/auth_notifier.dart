@@ -6,6 +6,7 @@ import 'dart:io';
 import 'auth_state.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/services/firebase_messaging_service.dart';
+import '../../crypto/crypto_provider.dart';
 
 final localAuthProvider  = Provider<LocalAuthentication>((_) => LocalAuthentication());
 
@@ -90,10 +91,11 @@ final authNotifierProvider =
           ref.read(localAuthProvider),
           ref.read(dioProvider),
           ref.read(secureStorageProvider),
+          ref, // Pass ref to access crypto logic dynamically
         ));
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier(this._localAuth, this._dio, this._storage)
+  AuthNotifier(this._localAuth, this._dio, this._storage, this._ref)
       : super(const AuthState()) {
     _init();
   }
@@ -101,6 +103,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final LocalAuthentication _localAuth;
   final Dio _dio;
   final FlutterSecureStorage _storage;
+  final Ref _ref;
 
   Future<void> _init() async {
     final token = await _storage.read(key: 'access_token');
@@ -147,9 +150,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
       username:    username,
       accessToken: token,
     );
+    // Sync Public Key with the server so E2EE always works
+    await _syncPublicKey();
+
     // Partner bilgisini arka planda yükle
     await _fetchPartner(token);
     await _registerDeviceToken(token);
+  }
+
+  Future<void> _syncPublicKey() async {
+    try {
+      // Lazy load crypto provider to avoid circular dependencies
+      final cryptoService = _ref.read(cryptoServiceProvider); // This generates keys if missing
+      final pubKey = cryptoService.publicKeyPem;
+      if (pubKey.isNotEmpty) {
+        await _dio.post('/Auth/public-key', data: {'publicKey': pubKey});
+      }
+    } catch (_) {}
   }
 
   void updateTokenState(String newToken) {
@@ -185,8 +202,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> register(String username, String password) async {
     try {
+      final cryptoService = _ref.read(cryptoServiceProvider); // Load crypto keys before registering
       await _dio.post('/Auth/register',
-          data: {'username': username, 'password': password});
+          data: {
+            'username': username, 
+            'password': password,
+            'publicKey': cryptoService.publicKeyPem // Send immediately on register
+          });
       await login(username, password);
     } on DioException catch (e) {
       state = state.copyWith(

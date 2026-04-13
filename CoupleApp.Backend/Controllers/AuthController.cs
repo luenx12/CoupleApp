@@ -188,6 +188,19 @@ public class AuthController : ControllerBase
         return Ok();
     }
 
+    [HttpPost("public-key")]
+    [Authorize]
+    public async Task<IActionResult> UpdatePublicKey([FromBody] PublicKeyDto dto)
+    {
+        var userId = GetUserId();
+        var user = await _users.GetByIdAsync(userId);
+        if (user is null) return NotFound();
+        
+        user.PublicKey = dto.PublicKey;
+        await _users.SaveChangesAsync();
+        return Ok();
+    }
+
     // ──────────────────────────────────────────────────────────────────────
 
     private string GenerateJwt(User user)
@@ -235,3 +248,4 @@ public record RegisterDto(string Username, string Password, string? PublicKey);
 public record LoginDto(string Username, string Password);
 public record RefreshDto(string RefreshToken);
 public record DeviceTokenDto(string Token, string Platform);
+public record PublicKeyDto(string PublicKey);

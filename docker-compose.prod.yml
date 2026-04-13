@@ -38,8 +38,8 @@ services:
       # appsettings içindeki Sentry:Dsn kısmını günceller:
       - Sentry__Dsn=${SENTRY_DSN}
       
-      # FCM Key (Eğer kodda 'Firebase:ServerKey' gibi bir yer varsa ona göre isimlendirilebilir):
-      - FCM_KEY=${FCM_KEY}
+      # Firebase credentials - ASP.NET Core maps Firebase__ServerKey -> Firebase:ServerKey
+      - Firebase__ServerKey=${Firebase__ServerKey}
       # --- KRİTİK AYARLAR BİTTİ ---
     ports:
       - "5000:8080"

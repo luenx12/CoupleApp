@@ -5,6 +5,7 @@
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 import '../../../core/config/app_config.dart';
 
@@ -79,7 +80,10 @@ class SignalRService {
       .withUrl(
         AppConfig.hubUrl,
         options: HttpConnectionOptions(
-          accessTokenFactory: () async => accessToken,
+          accessTokenFactory: () async {
+            const storage = FlutterSecureStorage();
+            return await storage.read(key: 'access_token');
+          },
           transport: kIsWeb ? null : HttpTransportType.WebSockets,
           skipNegotiation: kIsWeb ? false : true,
         ),

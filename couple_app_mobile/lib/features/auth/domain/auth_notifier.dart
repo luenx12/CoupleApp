@@ -57,6 +57,9 @@ class AuthInterceptor extends Interceptor {
           await storage.write(key: 'access_token', value: newAccess);
           await storage.write(key: 'refresh_token', value: newRefresh);
 
+          // Bilincsel state'i guncelle (boylece diger widgetlar eski tokeni kullanmaz)
+          ref.read(authNotifierProvider.notifier).updateTokenState(newAccess);
+
           // Retry the original request
           err.requestOptions.headers['Authorization'] = 'Bearer $newAccess';
           final cloneReq = await dio.request(
@@ -147,6 +150,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // Partner bilgisini arka planda yükle
     await _fetchPartner(token);
     await _registerDeviceToken(token);
+  }
+
+  void updateTokenState(String newToken) {
+    state = state.copyWith(accessToken: newToken);
   }
 
   Future<void> login(String username, String password) async {

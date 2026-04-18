@@ -76,9 +76,7 @@ class _DarkRoomWidgetState extends ConsumerState<DarkRoomWidget>
   void _startSession() {
     HapticFeedback.heavyImpact();
     _fadeController.forward(from: 0);
-    // Başlatma sinyali state'e yansıtıldı (already done via DarkRoomStarted hub event)
-    // demo için yerel aktifleştirme:
-    ref.read(redRoomNotifierProvider.notifier); // trigger rebuild
+    ref.read(redRoomNotifierProvider.notifier).startDarkRoom();
   }
 
   @override

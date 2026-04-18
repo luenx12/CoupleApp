@@ -350,6 +350,13 @@ class RedRoomNotifier extends StateNotifier<RedRoomState> {
 
   void closeDarkRoom() => state = state.copyWith(isDarkRoomActive: false);
 
+  /// 🔦 Karanlık Oda — Başlat
+  Future<void> startDarkRoom() async {
+    state = state.copyWith(isDarkRoomActive: true);
+    if (_partnerId == null) return;
+    await _ref.read(signalRServiceProvider).startDarkRoom(_partnerId!, "");
+  }
+
   /// 🛑 Güvenli kelime tetikle — tüm oturumları durdur
   Future<void> triggerSafeWord() async {
     if (_partnerId == null) return;

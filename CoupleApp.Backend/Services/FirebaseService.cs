@@ -23,13 +23,28 @@ public class FirebaseService : IFirebaseService
         {
             try 
             {
-                // In production, you'd mount a JSON credentials file via Docker and point to it,
-                // or supply the raw JSON in the environment. Here we assume JSON string.
+                GoogleCredential credential;
+                if (jsonKey.Trim().StartsWith("{")) 
+                {
+#pragma warning disable CS0618
+                    credential = GoogleCredential.FromJson(jsonKey);
+#pragma warning restore CS0618
+                }
+                else if (System.IO.File.Exists(jsonKey))
+                {
+#pragma warning disable CS0618
+                    credential = GoogleCredential.FromFile(jsonKey);
+#pragma warning restore CS0618
+                }
+                else 
+                {
+                    _logger.LogWarning("Firebase:ServerKey must be either a valid JSON string or a file path. Firebase will not be initialized.");
+                    return;
+                }
+
                 FirebaseApp.Create(new AppOptions
                 {
-#pragma warning disable CS0618 // Obsolete but required due to internal protection level of IGoogleCredential in this SDK version
-                    Credential = GoogleCredential.FromJson(jsonKey)
-#pragma warning restore CS0618
+                    Credential = credential
                 });
             }
             catch (Exception ex)
@@ -41,7 +56,12 @@ public class FirebaseService : IFirebaseService
 
     public async Task SendPushNotificationAsync(List<string> tokens, string title, string body)
     {
-        if (tokens == null || tokens.Count == 0 || FirebaseApp.DefaultInstance == null) return;
+        if (tokens == null || tokens.Count == 0) return;
+        if (FirebaseApp.DefaultInstance == null) 
+        {
+            _logger.LogWarning("Cannot send push notification because FirebaseApp is not initialized. Please ensure Firebase:ServerKey is provided in appsettings.json.");
+            throw new InvalidOperationException("Firebase is not initialized. ServerKey is missing.");
+        }
 
         var message = new MulticastMessage
         {

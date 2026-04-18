@@ -66,7 +66,7 @@ class GalleryNotifier extends StateNotifier<GalleryState> {
     final auth = ref.read(authNotifierProvider);
 
     if (auth.partnerId == null || auth.partnerPublicKey == null) {
-      throw Exception("You must have a partner to upload to the shared gallery.");
+      throw Exception("Partneriniz uygulamaya henüz giriş yapmamış. Şifreleme anahtarları eksik olduğundan galeriye yükleme yapılamaz.");
     }
 
     final newItem = await repo.uploadPhoto(

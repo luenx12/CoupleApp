@@ -31,6 +31,10 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
     "Partnerine dudaklarını yakından gösteren bir video at. 💋",
     "Kendi üzerinde en sevdiğin dövme veya izi gösteren bir video çek. ✨",
     "Partnerine 'Seni bekliyorum' diyen seksi bir fısıltı videosu gönder. 🤫",
+    "Mastürbasyon yaparken partnerine bir video gönder. 🍆",
+    "Partnerine en seksi fısıltınla bir ses kaydı gönder. 🎤",
+    "Ayna karşısında partnerinle paylaştığın en sevdiğin anıyı canlandır.",
+    "Sakso çekerken video at. 🍆",
   ];
 
   Timer? _timer;
@@ -62,8 +66,9 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
 
   Future<void> _captureAndSend() async {
     final picker = ImagePicker();
-    final file = await picker.pickVideo(source: ImageSource.gallery, maxDuration: const Duration(seconds: 15));
-    
+    final file = await picker.pickVideo(
+        source: ImageSource.gallery, maxDuration: const Duration(seconds: 15));
+
     if (file == null) return;
 
     // Zero-Leak E2EE Logic
@@ -71,10 +76,11 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
       final bytes = await file.readAsBytes();
       final crypto = ref.read(cryptoServiceProvider);
       final auth = ref.read(authNotifierProvider);
-      
+
       final partnerPubPem = auth.partnerPublicKey;
       if (partnerPubPem == null || partnerPubPem.isEmpty) {
-        throw Exception("Partner public key is missing! Pair with a partner first.");
+        throw Exception(
+            "Partnerin henüz giriş yapmamış veya eşleşme tamamlanmamış. İkiniz de uygulamanın son sürümünde olmalısınız.");
       }
 
       if (!crypto.isReady) {
@@ -90,7 +96,8 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
       // Read fresh token from secure storage
       const storage = FlutterSecureStorage();
       final token = await storage.read(key: 'access_token');
-      if (token == null) throw Exception("Session expired. Please log in again.");
+      if (token == null)
+        throw Exception("Session expired. Please log in again.");
 
       // Upload via POST
       var request = http.MultipartRequest(
@@ -103,17 +110,19 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
         payload.toBytes(),
         filename: 'encrypted.aes',
       ));
-      
+
       final streamed = await request.send();
       final respStr = await streamed.stream.bytesToString();
 
       if (streamed.statusCode == 200) {
         // Proper JSON parsing — no more fragile regex
         final decoded = jsonDecode(respStr) as Map<String, dynamic>;
-        final realMediaId = decoded['mediaId'] as String? 
-            ?? "redroom_${DateTime.now().millisecondsSinceEpoch}";
-        
-        await ref.read(gamesNotifierProvider.notifier).sendRedRoomMediaTask(realMediaId, 15);
+        final realMediaId = decoded['mediaId'] as String? ??
+            "redroom_${DateTime.now().millisecondsSinceEpoch}";
+
+        await ref
+            .read(gamesNotifierProvider.notifier)
+            .sendRedRoomMediaTask(realMediaId, 15);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -124,7 +133,8 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
           );
         }
       } else {
-        throw Exception("Upload failed with status: ${streamed.statusCode} — $respStr");
+        throw Exception(
+            "Upload failed with status: ${streamed.statusCode} — $respStr");
       }
     } catch (e) {
       debugPrint("Video upload error: $e");
@@ -164,7 +174,8 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.redAccent),
               boxShadow: [
-                BoxShadow(color: Colors.redAccent.withAlpha(80), blurRadius: 10),
+                BoxShadow(
+                    color: Colors.redAccent.withAlpha(80), blurRadius: 10),
               ],
             ),
             child: Row(
@@ -177,7 +188,8 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
                     children: [
                       Text(
                         "Gelen Gizli Mesaj!",
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
                       ),
                       Text(
                         "Tek seferlik video. İzledikten sonra silinecek.",
@@ -193,12 +205,15 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
                       builder: (_) => Dialog(
                         backgroundColor: Colors.transparent,
                         insetPadding: const EdgeInsets.all(10),
-                        child: SecureVideoPlayer(mediaId: state.incomingMediaId!),
+                        child:
+                            SecureVideoPlayer(mediaId: state.incomingMediaId!),
                       ),
                     );
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                  child: const Text("İZLE", style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent),
+                  child:
+                      const Text("İZLE", style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
@@ -226,14 +241,16 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
               if (!_isTaskActive)
                 Column(
                   children: [
-                    const Icon(Icons.videocam_rounded, size: 48, color: Colors.white24),
+                    const Icon(Icons.videocam_rounded,
+                        size: 48, color: Colors.white24),
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: _startTask,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.purpleAccent.withAlpha(50),
                         foregroundColor: Colors.purpleAccent,
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 32, vertical: 12),
                         side: const BorderSide(color: Colors.purpleAccent),
                       ),
                       child: const Text("RASGELE GÖREV AL"),
@@ -262,7 +279,8 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.timer_outlined, color: Colors.redAccent, size: 20),
+                        const Icon(Icons.timer_outlined,
+                            color: Colors.redAccent, size: 20),
                         const SizedBox(width: 8),
                         Text(
                           "Süre: $_secondsRemaining sn",
@@ -283,7 +301,8 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.redAccent,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 16),
                       ),
                     ),
                   ],

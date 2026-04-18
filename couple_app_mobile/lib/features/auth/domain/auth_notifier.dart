@@ -167,13 +167,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> _syncPublicKey() async {
     try {
-      // Lazy load crypto provider to avoid circular dependencies
-      final cryptoService = _ref.read(cryptoServiceProvider); // This generates keys if missing
+      // Kripto servisinin tamamen initiate olmasını (key generation) bekle
+      await _ref.read(cryptoInitProvider.future);
+      
+      final cryptoService = _ref.read(cryptoServiceProvider);
       final pubKey = cryptoService.publicKeyPem;
       if (pubKey.isNotEmpty) {
         await _dio.post('/Auth/public-key', data: {'publicKey': pubKey});
       }
-    } catch (_) {}
+    } catch (e) {
+      // Hata durumunda yutuluyor ancak en azından exception loglanabilir.
+    }
   }
 
   void updateTokenState(String newToken) {
@@ -213,6 +217,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId:      userId,
         username:    uname,
       );
+      // Backend'e her girişte mutlaka public-key senkronizasyonu yap
+      await _syncPublicKey();
+      
       // Partner bilgisini yükle
       await _fetchPartner(token);
       await _registerDeviceToken(token);

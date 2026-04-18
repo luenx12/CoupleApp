@@ -5,34 +5,59 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import 'dart:math' as math;
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
 import '../../domain/red_room_notifier.dart';
+import '../../../crypto/crypto_provider.dart';
+import '../../../crypto/crypto_service.dart';
+import '../../../auth/domain/auth_notifier.dart';
+import '../../../../core/config/app_config.dart';
+import '../../domain/games_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
 
 const _zoneEmoji = <String, String>{
-  'Dudaklar':           '👄',
-  'Boyun':              '🦢',
-  'Göğüz Dekoltesi':   '💎',
-  'Bacaklar':           '🦵',
-  'Bel Kavisi':         '〰️',
-  'Gözler':             '👁️',
+  'Dudaklar': '👄',
+  'Boyun': '🦢',
+  'Göğüz Dekoltesi': '💎',
+  'Bacaklar': '🦵',
+  'Bel Kavisi': '〰️',
+  'Gözler': '👁️',
   'İstediğin Bir Yer': '🎯',
-  'Omuzlar':            '🤷',
-  'El & Parmaklar':     '🤚',
+  'Omuzlar': '🤷',
+  'El & Parmaklar': '🤚',
+  'Kalçalar': '🍑',
+  'Minnnak': '🤏',
+  'Ağzının İçi': '👄',
+  'İç Çamaşırın': '👙',
+  'Sırt': '🫲',
+  'Ayaklar': '🦶',
+  'Bacak Arası': '🦵',
+  'Çıplak Vücudun': '👙',
 };
 
 const _zoneColors = <String, Color>{
-  'Dudaklar':           Color(0xFFFF4D8B),
-  'Boyun':              Color(0xFFBB86FC),
-  'Göğüs Dekoltesi':   Color(0xFFFF6B35),
-  'Bacaklar':           Color(0xFF00BCD4),
-  'Bel Kavisi':         Color(0xFFFF9800),
-  'Gözler':             Color(0xFF4CAF50),
+  'Dudaklar': Color(0xFFFF4D8B),
+  'Boyun': Color(0xFFBB86FC),
+  'Göğüs Dekoltesi': Color(0xFFFF6B35),
+  'Bacaklar': Color(0xFF00BCD4),
+  'Bel Kavisi': Color(0xFFFF9800),
+  'Gözler': Color(0xFF4CAF50),
   'İstediğin Bir Yer': Color(0xFFE91E8C),
-  'Omuzlar':            Color(0xFF2196F3),
-  'El & Parmaklar':     Color(0xFF9C27B0),
+  'Omuzlar': Color(0xFF2196F3),
+  'El & Parmaklar': Color(0xFF9C27B0),
+  'Kalçalar': Color(0xFF9C27B0),
+  'Minnnak': Color(0xFF9C27B0),
+  'Ağzının İçi': Color(0xFF9C27B0),
+  'İç Çamaşırın': Color(0xFF9C27B0),
+  'Sırt': Color(0xFF9C27B0),
+  'Ayaklar': Color(0xFF9C27B0),
+  'Bacak Arası': Color(0xFF9C27B0),
+  'Çıplak Vücudun': Color(0xFF9C27B0),
 };
 
 // Çark dilimleri
@@ -58,7 +83,8 @@ class _SnapshotRouletteWidgetState extends ConsumerState<SnapshotRouletteWidget>
       vsync: this,
       duration: const Duration(milliseconds: 2200),
     );
-    _spinAnim = CurvedAnimation(parent: _spinController, curve: Curves.easeOutBack);
+    _spinAnim =
+        CurvedAnimation(parent: _spinController, curve: Curves.easeOutBack);
   }
 
   @override
@@ -74,13 +100,89 @@ class _SnapshotRouletteWidgetState extends ConsumerState<SnapshotRouletteWidget>
     await ref.read(redRoomNotifierProvider.notifier).spinRoulette();
   }
 
+  Future<void> _captureAndSend(String zone) async {
+    final picker = ImagePicker();
+    final file =
+        await picker.pickImage(source: ImageSource.camera, imageQuality: 70);
+
+    if (file == null) return;
+
+    try {
+      final bytes = await file.readAsBytes();
+      final crypto = ref.read(cryptoServiceProvider);
+      final auth = ref.read(authNotifierProvider);
+
+      final partnerPubPem = auth.partnerPublicKey;
+      if (partnerPubPem == null || partnerPubPem.isEmpty) {
+        throw Exception(
+            "Partnerin henüz giriş yapmamış veya eşleşme tamamlanmamış.");
+      }
+
+      if (!crypto.isReady) {
+        throw Exception("Kripto servisi hazır değil.");
+      }
+
+      final payload = crypto.encrypt(bytes, partnerPubPem);
+      CryptoService.zeroFill(bytes);
+
+      const storage = FlutterSecureStorage();
+      final token = await storage.read(key: 'access_token');
+      if (token == null) throw Exception("Oturum süresi doldu.");
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${AppConfig.baseUrl}/api/Media/upload'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        payload.toBytes(),
+        filename: 'encrypted_roulette.aes',
+      ));
+
+      final streamed = await request.send();
+      final respStr = await streamed.stream.bytesToString();
+
+      if (streamed.statusCode == 200) {
+        final decoded = jsonDecode(respStr) as Map<String, dynamic>;
+        final realMediaId = decoded['mediaId'] as String? ??
+            "redroom_${DateTime.now().millisecondsSinceEpoch}";
+
+        await ref
+            .read(gamesNotifierProvider.notifier)
+            .sendRedRoomMediaTask(realMediaId, 5); // 5 saniye
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("📸 Fotoğraf şifrelenip partnerine gönderildi!"),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        throw Exception("Upload failed: $respStr");
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Hata: $e"),
+            backgroundColor: Colors.red[900],
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(redRoomNotifierProvider);
     final result = state.rouletteResult;
 
     ref.listen<RedRoomState>(redRoomNotifierProvider, (prev, next) {
-      if (next.rouletteResult != null && next.rouletteResult != prev?.rouletteResult) {
+      if (next.rouletteResult != null &&
+          next.rouletteResult != prev?.rouletteResult) {
         _spinController.forward(from: 0);
         HapticFeedback.heavyImpact();
       }
@@ -95,12 +197,15 @@ class _SnapshotRouletteWidgetState extends ConsumerState<SnapshotRouletteWidget>
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF001A0D), Color(0xFF00330A)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFF00FF88).withOpacity(0.3), width: 1.5),
+        border: Border.all(
+            color: const Color(0xFF00FF88).withOpacity(0.3), width: 1.5),
         boxShadow: [
-          BoxShadow(color: const Color(0xFF00FF88).withOpacity(0.1), blurRadius: 20),
+          BoxShadow(
+              color: const Color(0xFF00FF88).withOpacity(0.1), blurRadius: 20),
         ],
       ),
       child: Column(
@@ -121,7 +226,10 @@ class _SnapshotRouletteWidgetState extends ConsumerState<SnapshotRouletteWidget>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Snapshot Roulette',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800)),
                   Text('Bölge çıkar → çek → 3 sn sonra imha!',
                       style: TextStyle(color: Color(0xFF69FF96), fontSize: 11)),
                 ],
@@ -138,8 +246,11 @@ class _SnapshotRouletteWidgetState extends ConsumerState<SnapshotRouletteWidget>
               child: child,
             ),
             child: SizedBox(
-              width: 180, height: 180,
-              child: CustomPaint(painter: _WheelPainter(segments: _wheelSegments, zoneColors: _zoneColors)),
+              width: 180,
+              height: 180,
+              child: CustomPaint(
+                  painter: _WheelPainter(
+                      segments: _wheelSegments, zoneColors: _zoneColors)),
             ),
           ),
 
@@ -151,7 +262,11 @@ class _SnapshotRouletteWidgetState extends ConsumerState<SnapshotRouletteWidget>
             transitionBuilder: (child, anim) =>
                 ScaleTransition(scale: anim, child: child),
             child: result != null
-                ? _ZoneResult(result: result, color: zoneColor)
+                ? _ZoneResult(
+                    result: result,
+                    color: zoneColor,
+                    onSendPhoto: () => _captureAndSend(result.zone),
+                  )
                 : const _ZonePlaceholder(),
           ),
 
@@ -163,17 +278,24 @@ class _SnapshotRouletteWidgetState extends ConsumerState<SnapshotRouletteWidget>
             child: ElevatedButton.icon(
               onPressed: state.isSpinning ? null : _spin,
               icon: state.isSpinning
-                  ? const SizedBox(width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.black))
                   : const Text('🎡', style: TextStyle(fontSize: 18)),
               label: Text(
                 state.isSpinning ? 'Çark Dönüyor...' : 'RULETA ÇEVİR',
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.black),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: Colors.black),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF00FF88),
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
                 elevation: 8,
                 shadowColor: const Color(0xFF00FF88).withOpacity(0.5),
               ),
@@ -224,10 +346,15 @@ class _WheelPainter extends CustomPainter {
       final startAngle = i * segAngle - math.pi / 2;
       final color = (zoneColors[segments[i]] ?? Colors.grey).withOpacity(0.85);
 
-      final paint = Paint()..color = color..style = PaintingStyle.fill;
+      final paint = Paint()
+        ..color = color
+        ..style = PaintingStyle.fill;
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
-        startAngle, segAngle - 0.04, true, paint,
+        startAngle,
+        segAngle - 0.04,
+        true,
+        paint,
       );
 
       // Emoji label
@@ -246,13 +373,20 @@ class _WheelPainter extends CustomPainter {
         center.dx + labelRadius * math.cos(angle),
         center.dy + labelRadius * math.sin(angle),
       );
-      textPainter.paint(canvas, Offset(-textPainter.width / 2, -textPainter.height / 2));
+      textPainter.paint(
+          canvas, Offset(-textPainter.width / 2, -textPainter.height / 2));
       canvas.restore();
     }
 
     // Merkez daire
     canvas.drawCircle(center, 16, Paint()..color = Colors.black87);
-    canvas.drawCircle(center, 14, Paint()..color = const Color(0xFF00FF88)..style = PaintingStyle.stroke..strokeWidth = 2);
+    canvas.drawCircle(
+        center,
+        14,
+        Paint()
+          ..color = const Color(0xFF00FF88)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2);
   }
 
   @override
@@ -264,7 +398,10 @@ class _WheelPainter extends CustomPainter {
 class _ZoneResult extends StatelessWidget {
   final RouletteResult result;
   final Color color;
-  const _ZoneResult({required this.result, required this.color});
+  final VoidCallback onSendPhoto;
+
+  const _ZoneResult(
+      {required this.result, required this.color, required this.onSendPhoto});
 
   @override
   Widget build(BuildContext context) {
@@ -280,16 +417,36 @@ class _ZoneResult extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(_zoneEmoji[result.zone] ?? '🎯', style: const TextStyle(fontSize: 36)),
+          Text(_zoneEmoji[result.zone] ?? '🎯',
+              style: const TextStyle(fontSize: 36)),
           const SizedBox(width: 16),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('BÖLGEN:', style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1)),
+              const Text('BÖLGEN:',
+                  style: TextStyle(
+                      color: Colors.white38, fontSize: 10, letterSpacing: 1)),
               Text(result.zone,
-                  style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w900)),
+                  style: TextStyle(
+                      color: color, fontSize: 22, fontWeight: FontWeight.w900)),
               const Text('Çek & Gönder!',
                   style: TextStyle(color: Colors.white54, fontSize: 11)),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: onSendPhoto,
+                icon: const Icon(Icons.camera_alt, size: 16),
+                label: const Text("FOTOĞRAF GÖNDER",
+                    style:
+                        TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: color,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
             ],
           ),
         ],

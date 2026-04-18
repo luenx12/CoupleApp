@@ -10,7 +10,9 @@ import '../features/location/domain/location_notifier.dart';
 import '../features/gallery/presentation/gallery_screen.dart';
 import '../features/vibe/domain/vibe_notifier.dart';
 import '../features/vibe/presentation/vibe_dashboard_screen.dart';
+import '../features/games/domain/games_notifier.dart';
 import '../features/games/presentation/games_screen.dart';
+import '../features/profile/presentation/settings_screen.dart';
 import 'package:lottie/lottie.dart';
 
 final activeTabProvider = StateProvider<int>((_) => 0);
@@ -25,14 +27,21 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _connectSignalR());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initServices());
   }
 
-  Future<void> _connectSignalR() async {
+  Future<void> _initServices() async {
+    // 1. Connect SignalR first
     final token = ref.read(authNotifierProvider).accessToken;
     if (token != null) {
       await ref.read(signalRServiceProvider).connect(token);
     }
+
+    // 2. Initialize GamesNotifier AFTER SignalR is connected so its
+    //    callback registrations wire up to a live hub instance.
+    //    This ensures RedRoom media notifications work even when the
+    //    user hasn't navigated to the Games tab yet.
+    ref.read(gamesNotifierProvider);
   }
 
   static const _pages = [
@@ -136,6 +145,15 @@ class _TopBar extends StatelessWidget {
               ),
             ),
           ).animate(key: ValueKey(hubStatus)).fadeIn(duration: 300.ms),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
+          ),
         ],
       ),
     );

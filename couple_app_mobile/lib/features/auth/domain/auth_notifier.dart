@@ -173,6 +173,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(accessToken: newToken);
   }
 
+  Future<void> logout() async {
+    try {
+      // Backend logout request (fire and forget)
+      await _dio.post('/Auth/logout');
+    } catch (_) {
+      // Ignored: network failure shouldn't prevent local logout
+    }
+
+    // Clear secure storage keys
+    await _storage.deleteAll();
+
+    // Clear state completely
+    state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+
   Future<void> login(String username, String password) async {
     try {
       final res = await _dio.post('/Auth/login',
@@ -216,17 +231,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> logout() async {
-    try {
-      final token = state.accessToken;
-      if (token != null) {
-        await _dio.post('/Auth/revoke');
-      }
-    } catch (_) {}
-
-    await _storage.deleteAll();
-    state = const AuthState(status: AuthStatus.unauthenticated);
-  }
 
   Future<void> _registerDeviceToken(String? accessToken) async {
     if (accessToken == null) return;

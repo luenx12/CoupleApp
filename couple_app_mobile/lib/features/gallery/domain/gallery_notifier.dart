@@ -41,9 +41,13 @@ class GalleryNotifier extends StateNotifier<GalleryState> {
   final Ref ref;
 
   Future<void> fetchItems() async {
+    final repo = ref.read(galleryRepoProvider);
+    if (repo == null) {
+      // Not authenticated yet — stay in empty state, don't show error
+      return;
+    }
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final repo = ref.read(galleryRepoProvider);
       final items = await repo.fetchItems();
       if (mounted) {
         state = state.copyWith(items: items, isLoading: false);
@@ -56,34 +60,34 @@ class GalleryNotifier extends StateNotifier<GalleryState> {
   }
 
   Future<void> uploadPhoto(Uint8List imageBytes, DateTime? lockedUntil) async {
-    try {
-      final repo = ref.read(galleryRepoProvider);
-      final auth = ref.read(authNotifierProvider);
+    final repo = ref.read(galleryRepoProvider);
+    if (repo == null) throw Exception('Not authenticated.');
 
-      if (auth.partnerId == null || auth.partnerPublicKey == null) {
-        throw Exception("You must have a partner to upload to the shared gallery.");
-      }
+    final auth = ref.read(authNotifierProvider);
 
-      final newItem = await repo.uploadPhoto(
-        imageBytes: imageBytes,
-        partnerId: auth.partnerId!,
-        partnerPublicKeyPem: auth.partnerPublicKey!,
-        lockedUntil: lockedUntil,
+    if (auth.partnerId == null || auth.partnerPublicKey == null) {
+      throw Exception("You must have a partner to upload to the shared gallery.");
+    }
+
+    final newItem = await repo.uploadPhoto(
+      imageBytes: imageBytes,
+      partnerId: auth.partnerId!,
+      partnerPublicKeyPem: auth.partnerPublicKey!,
+      lockedUntil: lockedUntil,
+    );
+
+    // Ekle ve listeyi güncelle
+    if (mounted) {
+      state = state.copyWith(
+        items: [newItem, ...state.items], // Başa ekle
       );
-
-      // Ekle ve listeyi güncelle
-      if (mounted) {
-        state = state.copyWith(
-          items: [newItem, ...state.items], // Başa ekle
-        );
-      }
-    } catch (e) {
-      rethrow;
     }
   }
 
   Future<Uint8List> downloadImage(String mediaId) async {
     final repo = ref.read(galleryRepoProvider);
+    if (repo == null) throw Exception('Not authenticated.');
     return repo.downloadAndDecrypt(mediaId);
   }
 }
+

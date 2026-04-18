@@ -8,6 +8,14 @@ import 'widgets/spicy_truth_dare_widget.dart';
 import 'widgets/spicy_never_ever_widget.dart';
 import 'widgets/draw_game_widget.dart';
 import 'widgets/wordle/wordle_widget.dart';
+// Red Room Premium Modüller
+import 'widgets/spicy_dice_widget.dart';
+import 'widgets/red_match_widget.dart';
+import 'widgets/roleplay_generator_widget.dart';
+import 'widgets/body_map_widget.dart';
+import 'widgets/snapshot_roulette_widget.dart';
+import 'widgets/dark_room_widget.dart';
+import 'widgets/safe_word_button.dart';
 
 class GamesScreen extends StatefulWidget {
   const GamesScreen({super.key});
@@ -118,47 +126,160 @@ class _GamesScreenState extends State<GamesScreen> with SingleTickerProviderStat
 
   Widget _buildRedRoom() {
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Colors.black,
-            const Color(0xFF1A0000), // Very dark red
-            const Color(0xFF0D001A), // Very dark purple
+            Color(0xFF0A0000),
+            Color(0xFF1A0008),
+            Color(0xFF0D001A),
           ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),
       ),
-      child: const SingleChildScrollView(
-        padding: EdgeInsets.all(20),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              "❤️‍🔥 Kırmızı Oda",
-              style: TextStyle(
-                color: Colors.redAccent,
-                fontSize: 28,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.5,
+            // ── Hero Banner ────────────────────────────────────────────
+            Center(
+              child: Column(
+                children: [
+                  const Text('❤️‍🔥', style: TextStyle(fontSize: 40)),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'KIRMIZI ODA',
+                    style: TextStyle(
+                      color: Color(0xFFFF0055),
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Sadece ikinize özel — sıfır sızıntı, sonsuz tutku.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.4),
+                        fontSize: 12),
+                  ),
+                ],
               ),
             ),
-            SizedBox(height: 8),
-            Text(
-              "Sadece ikiniz için özel bir alan.",
-              style: TextStyle(color: Colors.redAccent, fontSize: 13),
-            ),
-            SizedBox(height: 40),
-            FlameSlider(),
-            SizedBox(height: 32),
-            RedRoomVideoTask(),
-            SizedBox(height: 24),
-            SpicyTruthDareWidget(),
-            SizedBox(height: 24),
-            SpicyNeverEverWidget(),
-            SizedBox(height: 40),
+
+            const SizedBox(height: 24),
+
+            // ── 🛑 Safe Word — Her zaman üstte ─────────────────────────
+            const SafeWordButton(),
+
+            const SizedBox(height: 28),
+
+            // ── 🔥 Ateş Seviyesi ────────────────────────────────────────
+            _sectionHeader('🔥', 'Ateş Seviyesi'),
+            const SizedBox(height: 12),
+            const FlameSlider(),
+
+            const SizedBox(height: 28),
+
+            // ── 🎲 İkimizin Zarları ──────────────────────────────────────
+            _sectionHeader('🎲', 'İkimizin Zarları'),
+            const SizedBox(height: 12),
+            const SpicyDiceWidget(),
+
+            const SizedBox(height: 28),
+
+            // ── 🔥 Red Match ─────────────────────────────────────────────
+            _sectionHeader('🔥', 'Red Match — Swipe to Passion'),
+            const SizedBox(height: 12),
+            const RedMatchWidget(),
+
+            const SizedBox(height: 28),
+
+            // ── 🎭 Roleplay Jeneratör ────────────────────────────────────
+            _sectionHeader('🎭', 'Roleplay Jeneratör'),
+            const SizedBox(height: 12),
+            const RoleplayGeneratorWidget(),
+
+            const SizedBox(height: 28),
+
+            // ── 🧭 Vücut Haritası ───────────────────────────────────────
+            _sectionHeader('🧭', 'Vücut Haritası'),
+            const SizedBox(height: 12),
+            const BodyMapWidget(),
+
+            const SizedBox(height: 28),
+
+            // ── 📸 Snapshot Roulette ─────────────────────────────────────
+            _sectionHeader('📸', 'Snapshot Roulette'),
+            const SizedBox(height: 12),
+            const SnapshotRouletteWidget(),
+
+            const SizedBox(height: 28),
+
+            // ── 🔦 Karanlık Oda ──────────────────────────────────────────
+            _sectionHeader('🔦', 'Karanlık Oda'),
+            const SizedBox(height: 12),
+            const DarkRoomWidget(),
+
+            const SizedBox(height: 28),
+
+            // ── 🎬 Süreli Medya Görevi ───────────────────────────────────
+            _sectionHeader('🎬', 'Süreli Medya Görevi'),
+            const SizedBox(height: 12),
+            const RedRoomVideoTask(),
+
+            const SizedBox(height: 28),
+
+            // ── 🃏 Spicy Truth or Dare ────────────────────────────────────
+            _sectionHeader('🃏', 'Doğru mu Yanlış mı?'),
+            const SizedBox(height: 12),
+            const SpicyTruthDareWidget(),
+
+            const SizedBox(height: 28),
+
+            // ── 🙅 Never Have I Ever ──────────────────────────────────────
+            _sectionHeader('🙅', 'Ben Hiç...'),
+            const SizedBox(height: 12),
+            const SpicyNeverEverWidget(),
+
+            const SizedBox(height: 40),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _sectionHeader(String emoji, String title) {
+    return Row(
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 18)),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFFFF0055).withOpacity(0.4),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

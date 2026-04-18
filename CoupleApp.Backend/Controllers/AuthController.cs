@@ -201,6 +201,28 @@ public class AuthController : ControllerBase
         return Ok();
     }
 
+    /// <summary>Logs out the user, clearing refresh tokens and device push tokens.</summary>
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<IActionResult> Logout()
+    {
+        var userId = GetUserId();
+
+        // 1. Revoke all refresh tokens
+        await _users.RevokeAllUserRefreshTokensAsync(userId);
+        
+        // 2. Remove all device push tokens for this user so they don't get notifications after logout
+        var tokens = await _users.GetDeviceTokensAsync(userId);
+        if (tokens.Count != 0)
+        {
+            await _users.RemoveDeviceTokensAsync(tokens);
+        }
+
+        await _users.SaveChangesAsync();
+        _logger.LogInformation("User {UserId} logged out successfully.", userId);
+        return Ok(new { message = "Logged out successfully" });
+    }
+
     // ──────────────────────────────────────────────────────────────────────
 
     private string GenerateJwt(User user)
@@ -218,7 +240,7 @@ public class AuthController : ControllerBase
             issuer:             _config["Jwt:Issuer"],
             audience:           _config["Jwt:Audience"],
             claims:             claims,
-            expires:            DateTime.UtcNow.AddMinutes(15),
+            expires:            DateTime.UtcNow.AddHours(1), // 60 minutes — prevents SignalR disconnections
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);

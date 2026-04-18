@@ -1,16 +1,16 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:video_player/video_player.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../crypto/crypto_service.dart';
-import '../../domain/games_notifier.dart';
-import 'dart:typed_data';
-
 import '../../../crypto/crypto_provider.dart';
+import '../../domain/games_notifier.dart';
 
 class SecureVideoPlayer extends ConsumerStatefulWidget {
   final String mediaId;
@@ -34,16 +34,23 @@ class _SecureVideoPlayerState extends ConsumerState<SecureVideoPlayer> {
 
   Future<void> _fetchAndPlay() async {
     try {
-      // 1. Fetch encrypted blob
+      // Read the auth token from secure storage
+      const storage = FlutterSecureStorage();
+      final token = await storage.read(key: 'access_token');
+      if (token == null) throw Exception('Not authenticated — no access token.');
+
+      final authHeader = {'Authorization': 'Bearer $token'};
+
+      // 1. Fetch encrypted blob (with auth)
       final uri = Uri.parse('${AppConfig.baseUrl}/api/Media/${widget.mediaId}');
-      final response = await http.get(uri); // Requires auth token in real app
+      final response = await http.get(uri, headers: authHeader);
 
       if (response.statusCode != 200) {
         throw Exception('Media fetch failed: ${response.statusCode}');
       }
 
       // 2. Decrypt in RAM
-      final crypto = ref.read(cryptoServiceProvider); // Assume this provider exists
+      final crypto = ref.read(cryptoServiceProvider);
       final payload = EncryptedPayload.fromBytes(response.bodyBytes);
       final decryptedBytes = crypto.decrypt(payload);
 
@@ -54,21 +61,28 @@ class _SecureVideoPlayerState extends ConsumerState<SecureVideoPlayer> {
 
       // Clear RAM bytes immediately
       CryptoService.zeroFill(decryptedBytes);
-      CryptoService.zeroFill(response.bodyBytes);
 
-      // 4. Play
+      // 4. Play — guard with mounted check
+      if (!mounted) return;
       _controller = VideoPlayerController.file(_tempFile!)
         ..initialize().then((_) {
+          if (!mounted) return;
           setState(() {
             _isLoading = false;
           });
           _controller!.play();
           _controller!.setLooping(false);
           _controller!.addListener(_videoListener);
+        }).catchError((err) {
+          if (mounted) setState(() => _error = err.toString());
         });
 
-      // 5. Delete from server immediately (Self-Destruct)
-      await http.delete(uri); 
+      // 5. Delete from server immediately (Self-Destruct) — with auth
+      try {
+        await http.delete(uri, headers: authHeader);
+      } catch (_) {
+        // Self-destruct is best-effort; don't block playback on failure
+      }
 
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());

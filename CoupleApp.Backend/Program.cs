@@ -21,7 +21,21 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // ════════════════════════════════════════════════════════════════════
 //  2. AUTHENTICATION — JWT Bearer
 // ════════════════════════════════════════════════════════════════════
-var jwtSecret = builder.Configuration["Jwt:Secret"]!;
+// JWT Secret: read from config (which in production is overridden by
+// ASPNETCORE environment variables using Jwt__Secret naming convention,
+// e.g. docker-compose env: JWT_SECRET should be mapped to Jwt__Secret)
+var jwtSecret = builder.Configuration["Jwt:Secret"]
+    ?? Environment.GetEnvironmentVariable("JWT_SECRET")
+    ?? throw new InvalidOperationException(
+        "JWT secret is not configured. Set 'Jwt:Secret' in appsettings or 'Jwt__Secret' environment variable.");
+
+if (jwtSecret.Contains("CHANGE_ME") || jwtSecret.Contains("${"))
+{
+    // Running with default/placeholder key — use a stable derived key for dev
+    // In PRODUCTION this must be overridden via environment variable!
+    if (!builder.Environment.IsDevelopment())
+        throw new InvalidOperationException("Production JWT secret must not use placeholder values!");
+}
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -74,7 +88,15 @@ builder.Services.AddHostedService<DailyTaskHostedService>();
 // ════════════════════════════════════════════════════════════════════
 //  5. CONTROLLERS + SWAGGER
 // ════════════════════════════════════════════════════════════════════
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o =>
+    {
+        // Ensure all API responses use camelCase so Flutter clients get:
+        // "accessToken", "refreshToken", "id", "mediaId", "inviteCode" etc.
+        o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        o.JsonSerializerOptions.DictionaryKeyPolicy  = System.Text.Json.JsonNamingPolicy.CamelCase;
+        o.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

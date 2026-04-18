@@ -9,18 +9,23 @@
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/config/app_config.dart';
 
 class MediaApiService {
-  MediaApiService(this._accessToken);
+  MediaApiService([this._initialToken]);
 
-  final String _accessToken;
+  final String? _initialToken;
 
   String get _base => AppConfig.baseUrl;
 
-  Map<String, String> get _authHeaders => {
-    'Authorization': 'Bearer $_accessToken',
-  };
+  Future<Map<String, String>> get _authHeaders async {
+    const storage = FlutterSecureStorage();
+    final token = await storage.read(key: 'access_token') ?? _initialToken;
+    return {
+      'Authorization': 'Bearer $token',
+    };
+  }
 
   // ── Upload (multipart) ───────────────────────────────────────────────────
 
@@ -32,7 +37,7 @@ class MediaApiService {
   }) async {
     final uri     = Uri.parse('$_base/api/Media/upload');
     final request = http.MultipartRequest('POST', uri)
-      ..headers.addAll(_authHeaders)
+      ..headers.addAll(await _authHeaders)
       ..fields['messageId'] = messageId
       ..files.add(
           http.MultipartFile.fromBytes(
@@ -56,7 +61,7 @@ class MediaApiService {
 
   Future<Uint8List> downloadEncryptedMedia(String mediaId) async {
     final uri      = Uri.parse('$_base/api/Media/$mediaId');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: await _authHeaders);
 
     if (response.statusCode == 200) return response.bodyBytes;
     throw Exception('Media download failed: ${response.statusCode}');
@@ -67,7 +72,7 @@ class MediaApiService {
   /// Gösterildikten sonra sunucudan kalıcı sil — self-destruct 🔥
   Future<void> selfDestruct(String mediaId) async {
     final uri      = Uri.parse('$_base/api/Media/$mediaId');
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(uri, headers: await _authHeaders);
 
     if (response.statusCode != 204 && response.statusCode != 200) {
       // Idempotent — zaten silinmişse hata fırlatma

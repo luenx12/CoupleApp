@@ -4,14 +4,16 @@ import '../../crypto/crypto_provider.dart';
 import '../data/gallery_api_service.dart';
 import '../data/gallery_repository.dart';
 
-final galleryApiProvider = Provider<GalleryApiService>((ref) {
+// Returns null when not authenticated (avoids exception during app startup)
+final galleryApiProvider = Provider<GalleryApiService?>((ref) {
   final token = ref.watch(authNotifierProvider).accessToken;
-  if (token == null) throw Exception('Not authenticated');
+  if (token == null || token.isEmpty) return null;
   return GalleryApiService(token);
 });
 
-final galleryRepoProvider = Provider<GalleryRepository>((ref) {
+final galleryRepoProvider = Provider<GalleryRepository?>((ref) {
   final api = ref.watch(galleryApiProvider);
+  if (api == null) return null;
   final crypto = ref.watch(cryptoServiceProvider);
   return GalleryRepository(api: api, crypto: crypto);
 });

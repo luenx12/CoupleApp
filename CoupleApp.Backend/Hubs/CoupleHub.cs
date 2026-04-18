@@ -495,6 +495,287 @@ public class CoupleHub : Hub
                          });
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    // 🔥 RED ROOM — Modül 1: Spicy Dice (İkimizin Zarları)
+    // ══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Mekan + Pozisyon zarını atar, sonucu hem arayıcıya hem partnere iletir.
+    /// Pozisyon nesnesi; ImageKey alanıyla Flutter tarafında SVG/asset eşleşmesi sağlar.
+    /// </summary>
+    public async Task RollDiceAsync(Guid partnerId)
+    {
+        var senderId = GetUserId();
+        var seed     = (int)(DateTime.UtcNow.Ticks % int.MaxValue);
+        var rng      = new Random(seed);
+
+        var locations = new[]
+        {
+            "Yatak Odası", "Duşakabin", "Mutfak Tezgahı", "Koltuk",
+            "Arka Koltuk", "Boy Aynası Karşısı", "Çamaşır Makinesi Üzeri",
+            "Balkon (Dikkatli Olun!)", "Yemek Masası"
+        };
+
+        // Her pozisyon için ImageKey, Flutter assets/red_room/positions/ klasörüyle eşleşir.
+        var positions = new[]
+        {
+            new RedRoomPosition("Misyoner",           "pos_missionary"),
+            new RedRoomPosition("Doggy Style",        "pos_doggy"),
+            new RedRoomPosition("Cowgirl (Üstte)",    "pos_cowgirl"),
+            new RedRoomPosition("Reverse Cowgirl",    "pos_rev_cowgirl"),
+            new RedRoomPosition("Ayakta",             "pos_standing"),
+            new RedRoomPosition("Kaşık Pozisyonu",    "pos_spooning"),
+            new RedRoomPosition("Ters Kaşık",         "pos_rev_spooning"),
+            new RedRoomPosition("Lotus Pozisyonu",    "pos_lotus"),
+            new RedRoomPosition("69 Pozisyonu",       "pos_69"),
+            new RedRoomPosition("Masa Kenarı",        "pos_edge"),
+            new RedRoomPosition("Kucakta (Yüz Yüze)","pos_lap_face"),
+            new RedRoomPosition("Amazon",             "pos_amazon"),
+            new RedRoomPosition("Makas Pozisyonu",    "pos_scissors"),
+            new RedRoomPosition("Omuzlarda",          "pos_shoulders"),
+            new RedRoomPosition("Köprü",              "pos_bridge"),
+        };
+
+        var durations = new[]
+        {
+            "10 Dakika", "15 Dakika", "Yarım Saat",
+            "Saatlerce", "Hızlıca (Quickie)", "Sen Yorulana Kadar"
+        };
+
+        var picked   = positions[rng.Next(positions.Length)];
+        var result   = new DiceResultDto(
+            Location : locations[rng.Next(locations.Length)],
+            Position : picked.Name,
+            ImageKey : picked.ImageKey,
+            Duration : durations[rng.Next(durations.Length)],
+            Seed     : seed
+        );
+
+        await Clients.Caller.SendAsync("DiceResult", result);
+
+        var partnerConns = _connectionManager.GetConnections(partnerId);
+        if (partnerConns.Count > 0)
+            await Clients.Clients(partnerConns).SendAsync("DiceResult", result);
+
+        _logger.LogInformation("[RedRoom] Dice rolled: {Sender}→{Partner} | Position={Position} ImageKey={Key}",
+            senderId, partnerId, result.Position, result.ImageKey);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 🔥 RED ROOM — Modül 2: Red Match (Swipe To Passion)
+    // ══════════════════════════════════════════════════════════════════════
+
+    // In-memory swipe store — key: "userId_itemId", value: direction
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string>
+        _swipeStore = new();
+
+    /// <summary>
+    /// Kullanıcı bir fantezi kartını kaydırdığında partnere bildirir.
+    /// itemId = kardaki benzersiz kimlik (ör: "pos_doggy", "fantasy_bdsm").
+    /// Her itemId; Flutter tarafında ImageKey olarak kullanılır.
+    /// </summary>
+    public async Task SwipeFantasyAsync(Guid partnerId, string itemId, string direction)
+    {
+        var senderId = GetUserId();
+        var key      = $"{senderId}_{itemId}";
+        _swipeStore[key] = direction;
+
+        // Eşleşme kontrolü — partner de aynı kartı sağa kaydırdı mı?
+        var partnerKey = $"{partnerId}_{itemId}";
+        if (direction == "right" && _swipeStore.TryGetValue(partnerKey, out var partnerDir) && partnerDir == "right")
+        {
+            // MATCH!
+            _swipeStore.TryRemove(key, out _);
+            _swipeStore.TryRemove(partnerKey, out _);
+
+            var matchPayload = new RedMatchDto(ItemId: itemId, MatchedAt: DateTime.UtcNow);
+            await Clients.Caller.SendAsync("RedMatch", matchPayload);
+
+            var partnerConns = _connectionManager.GetConnections(partnerId);
+            if (partnerConns.Count > 0)
+                await Clients.Clients(partnerConns).SendAsync("RedMatch", matchPayload);
+
+            _logger.LogInformation("[RedRoom] Match! {A} ↔ {B} on item={Item}", senderId, partnerId, itemId);
+            return;
+        }
+
+        // Henüz eşleşme yok — sadece partnere swipe haberini gönder
+        var partnerConnections = _connectionManager.GetConnections(partnerId);
+        if (partnerConnections.Count > 0)
+            await Clients.Clients(partnerConnections)
+                         .SendAsync("PartnerSwiped", new { SenderId = senderId, ItemId = itemId, Direction = direction });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 🔥 RED ROOM — Modül 3: Roleplay Jeneratörü
+    // ══════════════════════════════════════════════════════════════════════
+
+    public async Task GenerateRoleplayAsync(Guid partnerId)
+    {
+        var rng   = new Random();
+        var roles = new[]
+        {
+            new { Role1 = "Patron",       Role2 = "Asistan",   Atmosphere = "Gece Geç Saat, Boş Ofis" },
+            new { Role1 = "Yabancı",      Role2 = "Yabancı",   Atmosphere = "Otel Barında İlk Tanışma" },
+            new { Role1 = "Öğretmen",     Role2 = "Öğrenci",   Atmosphere = "Cezaya Kalınan Sınıf" },
+            new { Role1 = "Polis Memuru", Role2 = "Suçlu",     Atmosphere = "Sorgu Odası" },
+            new { Role1 = "Sahip/Sahibe", Role2 = "İtaatkar",  Atmosphere = "Kırmızı Oda (BDSM)" },
+            new { Role1 = "Doktor",       Role2 = "Hasta",     Atmosphere = "Özel Muayenehane" },
+            new { Role1 = "Masör/Masöz",  Role2 = "Müşteri",   Atmosphere = "VIP Spa Odası" },
+            new { Role1 = "Gardiyan",     Role2 = "Mahkum",    Atmosphere = "Hapishane Koridoru" },
+            new { Role1 = "Dedektif",     Role2 = "Tanık",     Atmosphere = "Karanlık Ofis" },
+            new { Role1 = "Prens",        Role2 = "Prenses",   Atmosphere = "Ortaçağ Sarayı" },
+        };
+
+        var pick         = roles[rng.Next(roles.Length)];
+        var instructions = $"Senaryo: {pick.Atmosphere}. Kural: Karakterden çıkmak yok. Güvenli kelime: 'KIRMIZI'.";
+
+        // Sender'a kendi rolü, Partner'a karşı rolü gönderilir
+        await Clients.Caller.SendAsync("RoleplayGenerated", new RoleplayDto(
+            MyRole: pick.Role1, PartnerRole: pick.Role2,
+            Atmosphere: pick.Atmosphere, Instructions: instructions));
+
+        var partnerConns = _connectionManager.GetConnections(partnerId);
+        if (partnerConns.Count > 0)
+            await Clients.Clients(partnerConns).SendAsync("RoleplayGenerated", new RoleplayDto(
+                MyRole: pick.Role2, PartnerRole: pick.Role1,
+                Atmosphere: pick.Atmosphere, Instructions: instructions));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 🔥 RED ROOM — Modül 4: Vücut Haritası
+    // ══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// pointsJson: [{"x":0.35,"y":0.42,"label":"Boyun"}, ...] formatında JSON.
+    /// Sunucu içeriğe bakmaz — Zero-Leak prensibi korunur.
+    /// </summary>
+    public async Task SendBodyMapAsync(Guid partnerId, string pointsJson)
+    {
+        var senderId     = GetUserId();
+        var partnerConns = _connectionManager.GetConnections(partnerId);
+        if (partnerConns.Count > 0)
+            await Clients.Clients(partnerConns).SendAsync("BodyMapUpdated", new
+            {
+                SenderId    = senderId,
+                PointsJson  = pointsJson,
+                UpdatedAt   = DateTime.UtcNow
+            });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 🔥 RED ROOM — Modül 5: Snapshot Roulette
+    // ══════════════════════════════════════════════════════════════════════
+
+    public async Task SpinRouletteAsync(Guid partnerId)
+    {
+        var rng   = new Random();
+        var zones = new[]
+        {
+            new { Zone = "Dudaklar",          ImageKey = "zone_lips"         },
+            new { Zone = "Boyun",             ImageKey = "zone_neck"         },
+            new { Zone = "Göğüz Dekoltesi",   ImageKey = "zone_decolletage"  },
+            new { Zone = "Bacaklar",          ImageKey = "zone_legs"         },
+            new { Zone = "Bel Kavisi",        ImageKey = "zone_waist"        },
+            new { Zone = "Gözler",            ImageKey = "zone_eyes"         },
+            new { Zone = "İstediğin Bir Yer", ImageKey = "zone_free"         },
+            new { Zone = "Omuzlar",           ImageKey = "zone_shoulders"    },
+            new { Zone = "El & Parmaklar",    ImageKey = "zone_hands"        },
+        };
+
+        var pick    = zones[rng.Next(zones.Length)];
+        var payload = new RouletteResultDto(Zone: pick.Zone, ImageKey: pick.ImageKey, SpunAt: DateTime.UtcNow);
+
+        await Clients.Caller.SendAsync("RouletteResult", payload);
+
+        var partnerConns = _connectionManager.GetConnections(partnerId);
+        if (partnerConns.Count > 0)
+            await Clients.Clients(partnerConns).SendAsync("RouletteResult", payload);
+    }
+
+    /// <summary>
+    /// Roulette'den çıkan bölge fotoğrafını (3 sn sonra imha emriyle) partnere iletir.
+    /// </summary>
+    public async Task SendRouletteMediaAsync(Guid partnerId, string mediaId, string zone)
+    {
+        var senderId     = GetUserId();
+        var partnerConns = _connectionManager.GetConnections(partnerId);
+        if (partnerConns.Count > 0)
+            await Clients.Clients(partnerConns).SendAsync("RouletteMediaReceived", new
+            {
+                SenderId        = senderId,
+                MediaId         = mediaId,
+                Zone            = zone,
+                DestructAfterMs = 3000
+            });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 🔥 RED ROOM — Modül 7: Karanlık Oda (Spotlight & Heatmap)
+    // ══════════════════════════════════════════════════════════════════════
+
+    /// <summary>Parmak koordinatını (normalize 0-1) partnere ultra-low latency aktarır.</summary>
+    public async Task SendSpotlightMoveAsync(Guid partnerId, double x, double y)
+    {
+        var partnerConns = _connectionManager.GetConnections(partnerId);
+        if (partnerConns.Count > 0)
+            await Clients.Clients(partnerConns).SendAsync("SpotlightMoved", new
+            {
+                X  = x,
+                Y  = y,
+                Ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            });
+    }
+
+    /// <summary>Karanlık Oda oturumunu başlatır — şifreli medya ID'si partnere iletilir.</summary>
+    public async Task StartDarkRoomAsync(Guid partnerId, string encryptedMediaId)
+    {
+        var senderId     = GetUserId();
+        var partnerConns = _connectionManager.GetConnections(partnerId);
+        if (partnerConns.Count > 0)
+            await Clients.Clients(partnerConns).SendAsync("DarkRoomStarted", new
+            {
+                SenderId         = senderId,
+                EncryptedMediaId = encryptedMediaId,
+                StartedAt        = DateTime.UtcNow
+            });
+
+        _logger.LogInformation("[RedRoom] DarkRoom started: {Sender}→{Partner}", senderId, partnerId);
+    }
+
+    /// <summary>Isı haritası güncellemesi — hangi bölgeye en çok bakıldığı hesaplanır.</summary>
+    public async Task SendHeatmapUpdateAsync(Guid partnerId, string heatmapJson)
+    {
+        var partnerConns = _connectionManager.GetConnections(partnerId);
+        if (partnerConns.Count > 0)
+            await Clients.Clients(partnerConns).SendAsync("HeatmapUpdated", new
+            {
+                HeatmapJson = heatmapJson,
+                UpdatedAt   = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 🛑 RED ROOM — Safe Word & Emergency Stop
+    // ══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Güvenli kelime tetiklendiğinde her iki tarafı da anlık olarak durdurur.
+    /// Her aktif Red Room oturumu bu sinyali izler ve kendini kapatır.
+    /// </summary>
+    public async Task TriggerSafeWordAsync(Guid partnerId)
+    {
+        var senderId     = GetUserId();
+        var partnerConns = _connectionManager.GetConnections(partnerId);
+        var payload      = new { SenderId = senderId, TriggeredAt = DateTime.UtcNow };
+
+        await Clients.Caller.SendAsync("SafeWordTriggered", payload);
+        if (partnerConns.Count > 0)
+            await Clients.Clients(partnerConns).SendAsync("SafeWordTriggered", payload);
+
+        _logger.LogWarning("[RedRoom] ⚠️ SAFE WORD triggered by {UserId}!", senderId);
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────
@@ -540,4 +821,39 @@ public record DrawStrokeDto(
     string             Color,
     double             StrokeWidth,
     bool               IsEraser = false
+);
+
+// ── Red Room DTOs ──────────────────────────────────────────────────────────
+
+/// <summary>Zar atma sonucu — ImageKey Flutter asset yolu için kullanılır.</summary>
+public record DiceResultDto(
+    string Location,
+    string Position,
+    string ImageKey,
+    string Duration,
+    int    Seed
+);
+
+/// <summary>Pozisyon listesi için iç yardımcı kayıt.</summary>
+public record RedRoomPosition(string Name, string ImageKey);
+
+/// <summary>Roleplay senaryosu.</summary>
+public record RoleplayDto(
+    string MyRole,
+    string PartnerRole,
+    string Atmosphere,
+    string Instructions
+);
+
+/// <summary>Red Match eşleşme bildirimi.</summary>
+public record RedMatchDto(
+    string   ItemId,
+    DateTime MatchedAt
+);
+
+/// <summary>Snapshot Roulette zone sonucu.</summary>
+public record RouletteResultDto(
+    string   Zone,
+    string   ImageKey,
+    DateTime SpunAt
 );

@@ -1,0 +1,12 @@
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\bin\Release\net8.0\CoupleApp.Core.deps.json
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\bin\Release\net8.0\CoupleApp.Core.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\bin\Release\net8.0\CoupleApp.Core.pdb
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\obj\Release\net8.0\CoupleApp.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\obj\Release\net8.0\CoupleApp.Core.AssemblyInfoInputs.cache
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\obj\Release\net8.0\CoupleApp.Core.AssemblyInfo.cs
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\obj\Release\net8.0\CoupleApp.Core.csproj.CoreCompileInputs.cache
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\obj\Release\net8.0\CoupleApp.Core.sourcelink.json
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\obj\Release\net8.0\CoupleApp.Core.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\obj\Release\net8.0\refint\CoupleApp.Core.dll
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\obj\Release\net8.0\CoupleApp.Core.pdb
+C:\Users\user\Desktop\CoupleApp\CoupleApp.Core\obj\Release\net8.0\ref\CoupleApp.Core.dll

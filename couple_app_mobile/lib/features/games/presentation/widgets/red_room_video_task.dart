@@ -1,16 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/games_notifier.dart';
 import '../../../auth/domain/auth_notifier.dart';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../../core/config/app_config.dart';
 import '../../../crypto/crypto_provider.dart';
 import '../../../crypto/crypto_service.dart';
 import 'secure_video_player.dart';
-// we will focus on the capture and E2EE flow logic.
 
 class RedRoomVideoTask extends ConsumerStatefulWidget {
   const RedRoomVideoTask({super.key});
@@ -74,45 +74,71 @@ class _RedRoomVideoTaskState extends ConsumerState<RedRoomVideoTask> {
       
       final partnerPubPem = auth.partnerPublicKey;
       if (partnerPubPem == null || partnerPubPem.isEmpty) {
-        throw Exception("Partner public key is missing!");
+        throw Exception("Partner public key is missing! Pair with a partner first.");
       }
 
-      // App will momentarily pause during encryption (UI thread), but it will succeed.
+      if (!crypto.isReady) {
+        throw Exception("Crypto service not ready. Please restart the app.");
+      }
+
+      // Encrypt for partner
       final payload = crypto.encrypt(bytes, partnerPubPem);
 
-      // Clear memory
+      // Clear memory immediately after encryption
       CryptoService.zeroFill(bytes);
 
+      // Read fresh token from secure storage
+      const storage = FlutterSecureStorage();
+      final token = await storage.read(key: 'access_token');
+      if (token == null) throw Exception("Session expired. Please log in again.");
+
       // Upload via POST
-      var request = http.MultipartRequest('POST', Uri.parse('${AppConfig.baseUrl}/api/Media/upload'));
-      request.headers['Authorization'] = 'Bearer ${auth.accessToken}'; 
-      request.files.add(http.MultipartFile.fromBytes('file', payload.toBytes(), filename: 'encrypted.aes'));
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${AppConfig.baseUrl}/api/Media/upload'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        payload.toBytes(),
+        filename: 'encrypted.aes',
+      ));
       
-      final response = await request.send();
-      if (response.statusCode == 200) {
-        final respStr = await response.stream.bytesToString();
-        // Since the backend returns { "mediaId": "..." }, we parse it natively:
-        final decoded = respStr.contains('mediaId') ? RegExp(r'"mediaId"\s*:\s*"([^"]+)"').firstMatch(respStr)?.group(1) : null;
-        final realMediaId = decoded ?? "redroom_${DateTime.now().millisecondsSinceEpoch}";
+      final streamed = await request.send();
+      final respStr = await streamed.stream.bytesToString();
+
+      if (streamed.statusCode == 200) {
+        // Proper JSON parsing — no more fragile regex
+        final decoded = jsonDecode(respStr) as Map<String, dynamic>;
+        final realMediaId = decoded['mediaId'] as String? 
+            ?? "redroom_${DateTime.now().millisecondsSinceEpoch}";
         
         await ref.read(gamesNotifierProvider.notifier).sendRedRoomMediaTask(realMediaId, 15);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("🔥 Özel video şifrelendi ve partnerine uçuruldu!"),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
       } else {
-        throw Exception("Upload failed with status: ${response.statusCode}");
+        throw Exception("Upload failed with status: ${streamed.statusCode} — $respStr");
       }
     } catch (e) {
       debugPrint("Video upload error: $e");
-    }
-
-    _timer?.cancel();
-    setState(() => _isTaskActive = false);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("🔥 Özel video şifrelendi ve partnerine uçuruldu!"),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Hata: $e"),
+            backgroundColor: Colors.red[900],
+          ),
+        );
+      }
+    } finally {
+      _timer?.cancel();
+      if (mounted) setState(() => _isTaskActive = false);
     }
   }
 

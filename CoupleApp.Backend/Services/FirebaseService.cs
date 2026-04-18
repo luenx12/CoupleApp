@@ -27,7 +27,9 @@ public class FirebaseService : IFirebaseService
                 // or supply the raw JSON in the environment. Here we assume JSON string.
                 FirebaseApp.Create(new AppOptions
                 {
+#pragma warning disable CS0618 // Obsolete but required due to internal protection level of IGoogleCredential in this SDK version
                     Credential = GoogleCredential.FromJson(jsonKey)
+#pragma warning restore CS0618
                 });
             }
             catch (Exception ex)

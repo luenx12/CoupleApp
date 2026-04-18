@@ -3,10 +3,10 @@
 // Handles: messages, typing, location events
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:signalr_netcore/signalr_client.dart';
+import 'package:signalr_netcore/ihub_protocol.dart';
 import '../../../core/config/app_config.dart';
 
 export 'signalr_service.dart' show HubConnectionStatus, hubStatusProvider, signalRServiceProvider;
@@ -39,9 +39,21 @@ typedef WordleChallengeHandler = void Function(String senderId, String encrypted
 typedef WordleResultHandler = void Function(String senderId, int attempts, bool isDaily);
 
 // DrawGame handlers
-typedef DrawStrokeHandler = void Function(Map<String, dynamic> dto);
-typedef DrawClearHandler = void Function(Map<String, dynamic> dto);
+typedef DrawStrokeHandler      = void Function(Map<String, dynamic> dto);
+typedef DrawClearHandler       = void Function(Map<String, dynamic> dto);
 typedef DrawGuessResultHandler = void Function(Map<String, dynamic> dto);
+
+// ── Red Room handlers ──────────────────────────────────────────────────────
+typedef DiceResultHandler       = void Function(Map<String, dynamic> result);
+typedef PartnerSwipedHandler    = void Function(String senderId, String itemId, String direction);
+typedef RedMatchHandler         = void Function(String itemId, DateTime matchedAt);
+typedef RoleplayHandler         = void Function(Map<String, dynamic> result);
+typedef BodyMapHandler          = void Function(String senderId, String pointsJson);
+typedef RouletteResultHandler   = void Function(Map<String, dynamic> result);
+typedef SafeWordHandler         = void Function(String senderId);
+typedef DarkRoomHandler         = void Function(Map<String, dynamic> payload);
+typedef SpotlightMovedHandler   = void Function(double x, double y, int ts);
+typedef HeatmapUpdatedHandler   = void Function(String heatmapJson);
 
 class SignalRService {
   SignalRService(this._ref);
@@ -66,29 +78,62 @@ class SignalRService {
   WordleResultHandler? onWordleResultReceived;
   
   // DrawGame Callbacks
-  DrawStrokeHandler? onDrawStrokeReceived;
-  DrawClearHandler? onDrawCleared;
+  DrawStrokeHandler?      onDrawStrokeReceived;
+  DrawClearHandler?       onDrawCleared;
   DrawGuessResultHandler? onDrawGuessResult;
+
+  // ── Red Room Callbacks ─────────────────────────────────────────────────
+  DiceResultHandler?     onDiceResult;
+  PartnerSwipedHandler?  onPartnerSwiped;
+  RedMatchHandler?       onRedMatch;
+  RoleplayHandler?       onRoleplayGenerated;
+  BodyMapHandler?        onBodyMapUpdated;
+  RouletteResultHandler? onRouletteResult;
+  SafeWordHandler?       onSafeWordTriggered;
+  DarkRoomHandler?       onDarkRoomStarted;
+  SpotlightMovedHandler? onSpotlightMoved;
+  HeatmapUpdatedHandler? onHeatmapUpdated;
 
   // ── Connect ───────────────────────────────────────────────────────────────
 
   Future<void> connect(String accessToken) async {
-    if (_hub != null) return;
+    if (_hub != null &&
+        _hub!.state == HubConnectionState.Connected) return;
+
+    // If hub already exists but not connected, stop it first
+    if (_hub != null) {
+      try {
+        await _hub!.stop();
+      } catch (_) {}
+      _hub = null;
+    }
+
     _setStatus(HubConnectionStatus.connecting);
+
+    // Always read the latest token from storage (handles token refresh)
+    const storage = FlutterSecureStorage();
+    final latestToken =
+        await storage.read(key: 'access_token') ?? accessToken;
 
     _hub = HubConnectionBuilder()
       .withUrl(
         AppConfig.hubUrl,
         options: HttpConnectionOptions(
           accessTokenFactory: () async {
-            const storage = FlutterSecureStorage();
-            return await storage.read(key: 'access_token') ?? accessToken;
+            // Always read fresh token from secure storage on each call
+            return await storage.read(key: 'access_token') ?? latestToken;
           },
-          transport: kIsWeb ? null : HttpTransportType.WebSockets,
-          skipNegotiation: kIsWeb ? false : true,
+          // Do NOT skip negotiation — the negotiate endpoint validates JWT
+          // and selects the best transport. skipNegotiation=true only works
+          // when you can guarantee a direct WebSocket path, which Nginx
+          // requires special handling for.
+          skipNegotiation: false,
+          // Allow all transports; SignalR will negotiate best one
+          transport: null,
+          headers: MessageHeaders()..setHeaderValue('Authorization', 'Bearer $latestToken'),
         ),
       )
-      .withAutomaticReconnect(retryDelays: [0, 2000, 5000, 10000, 30000])
+      .withAutomaticReconnect(retryDelays: AppConfig.reconnectDelaysMs)
       .build();
 
     _hub!.onclose(({error}) {
@@ -241,6 +286,84 @@ class SignalRService {
       onDrawGuessResult?.call(dto);
     });
 
+    // ── Red Room Events ───────────────────────────────────────────────────
+
+    _hub!.on('DiceResult', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args[0];
+      final dto = (raw is Map) ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      onDiceResult?.call(dto);
+    });
+
+    _hub!.on('PartnerSwiped', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw       = args[0] as Map?;
+      final senderId  = raw?['senderId']?.toString() ?? '';
+      final itemId    = raw?['itemId']?.toString() ?? '';
+      final direction = raw?['direction']?.toString() ?? '';
+      onPartnerSwiped?.call(senderId, itemId, direction);
+    });
+
+    _hub!.on('RedMatch', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw      = args[0] as Map?;
+      final itemId   = raw?['itemId']?.toString() ?? '';
+      final matchedAt = DateTime.tryParse(raw?['matchedAt']?.toString() ?? '') ?? DateTime.now();
+      onRedMatch?.call(itemId, matchedAt);
+    });
+
+    _hub!.on('RoleplayGenerated', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args[0];
+      final dto = (raw is Map) ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      onRoleplayGenerated?.call(dto);
+    });
+
+    _hub!.on('BodyMapUpdated', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw        = args[0] as Map?;
+      final senderId   = raw?['senderId']?.toString() ?? '';
+      final pointsJson = raw?['pointsJson']?.toString() ?? '';
+      onBodyMapUpdated?.call(senderId, pointsJson);
+    });
+
+    _hub!.on('RouletteResult', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args[0];
+      final dto = (raw is Map) ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      onRouletteResult?.call(dto);
+    });
+
+    _hub!.on('SafeWordTriggered', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw      = args[0] as Map?;
+      final senderId = raw?['senderId']?.toString() ?? '';
+      onSafeWordTriggered?.call(senderId);
+    });
+
+    _hub!.on('DarkRoomStarted', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args[0];
+      final dto = (raw is Map) ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      onDarkRoomStarted?.call(dto);
+    });
+
+    _hub!.on('SpotlightMoved', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args[0] as Map?;
+      final x   = (raw?['x'] as num?)?.toDouble() ?? 0.0;
+      final y   = (raw?['y'] as num?)?.toDouble() ?? 0.0;
+      final ts  = raw?['ts'] as int? ?? 0;
+      onSpotlightMoved?.call(x, y, ts);
+    });
+
+    _hub!.on('HeatmapUpdated', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw         = args[0] as Map?;
+      final heatmapJson = raw?['heatmapJson']?.toString() ?? '';
+      onHeatmapUpdated?.call(heatmapJson);
+    });
+
     // ── Start ────────────────────────────────────────────────────────────
 
     try {
@@ -332,6 +455,48 @@ class SignalRService {
   Future<void> sendWordleResult(String partnerId, int attempts, bool isDaily) async {
     if (_hub?.state != HubConnectionState.Connected) return;
     await _hub!.invoke('SendWordleResultAsync', args: [partnerId, attempts, isDaily]);
+  }
+
+  // ── Red Room Sends ─────────────────────────────────────────────────────────
+
+  Future<void> rollDice(String partnerId) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('RollDiceAsync', args: [partnerId]);
+  }
+
+  Future<void> swipeFantasy(String partnerId, String itemId, String direction) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('SwipeFantasyAsync', args: [partnerId, itemId, direction]);
+  }
+
+  Future<void> generateRoleplay(String partnerId) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('GenerateRoleplayAsync', args: [partnerId]);
+  }
+
+  Future<void> sendBodyMap(String partnerId, String pointsJson) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('SendBodyMapAsync', args: [partnerId, pointsJson]);
+  }
+
+  Future<void> spinRoulette(String partnerId) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('SpinRouletteAsync', args: [partnerId]);
+  }
+
+  Future<void> sendSpotlightMove(String partnerId, double x, double y) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('SendSpotlightMoveAsync', args: [partnerId, x, y]);
+  }
+
+  Future<void> startDarkRoom(String partnerId, String encryptedMediaId) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('StartDarkRoomAsync', args: [partnerId, encryptedMediaId]);
+  }
+
+  Future<void> triggerSafeWord(String partnerId) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('TriggerSafeWordAsync', args: [partnerId]);
   }
 
   // ── DrawGame Sends ────────────────────────────────────────────────────────

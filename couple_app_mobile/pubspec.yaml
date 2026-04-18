@@ -78,6 +78,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/red_room/positions/
 
 flutter_launcher_icons:
   android: "launcher_icon"

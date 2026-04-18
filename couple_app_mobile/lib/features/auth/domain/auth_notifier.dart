@@ -106,13 +106,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final Ref _ref;
 
   Future<void> _init() async {
-    final token = await _storage.read(key: 'access_token');
-    if (token != null) {
-      state = state.copyWith(
-        status:      AuthStatus.biometricPending,
-        accessToken: token,
-      );
-    } else {
+    try {
+      final token = await _storage.read(key: 'access_token');
+      if (token != null) {
+        state = state.copyWith(
+          status:      AuthStatus.biometricPending,
+          accessToken: token,
+        );
+      } else {
+        state = state.copyWith(status: AuthStatus.unauthenticated);
+      }
+    } catch (e) {
+      // Keystore corruption on Android can cause .read() to throw.
+      // Clear storage and fallback to unauthenticated.
+      try { await _storage.deleteAll(); } catch (_) {}
       state = state.copyWith(status: AuthStatus.unauthenticated);
     }
   }

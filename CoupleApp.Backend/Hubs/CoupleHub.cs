@@ -15,30 +15,30 @@ namespace CoupleApp.Backend.Hubs;
 [Authorize]
 public class CoupleHub : Hub
 {
-    private readonly IConnectionManager  _connectionManager;
-    private readonly IMessageRepository  _messages;
-    private readonly IUserRepository     _users;
-    private readonly IFirebaseService    _firebase;
-    private readonly ILogger<CoupleHub>  _logger;
+    private readonly IConnectionManager _connectionManager;
+    private readonly IMessageRepository _messages;
+    private readonly IUserRepository _users;
+    private readonly IFirebaseService _firebase;
+    private readonly ILogger<CoupleHub> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
 
     // In-memory cache for WhoIsMore answers to determine matches quickly
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _whoIsMoreAnswers = new();
 
     public CoupleHub(
-        IConnectionManager  connectionManager,
-        IMessageRepository  messages,
-        IUserRepository     users,
-        IFirebaseService    firebase,
-        ILogger<CoupleHub>  logger,
+        IConnectionManager connectionManager,
+        IMessageRepository messages,
+        IUserRepository users,
+        IFirebaseService firebase,
+        ILogger<CoupleHub> logger,
         IServiceScopeFactory scopeFactory)
     {
         _connectionManager = connectionManager;
-        _messages          = messages;
-        _users             = users;
-        _firebase          = firebase;
-        _logger            = logger;
-        _scopeFactory      = scopeFactory;
+        _messages = messages;
+        _users = users;
+        _firebase = firebase;
+        _logger = logger;
+        _scopeFactory = scopeFactory;
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -91,15 +91,15 @@ public class CoupleHub : Hub
         // 3. Persist (ciphertext only — Zero-Leak principle)
         var message = new Message
         {
-            SenderId               = senderId,
-            ReceiverId             = dto.ReceiverId,
-            EncryptedText          = dto.EncryptedText,
+            SenderId = senderId,
+            ReceiverId = dto.ReceiverId,
+            EncryptedText = dto.EncryptedText,
             EncryptedTextForSender = dto.EncryptedTextForSender,
-            IV                     = dto.IV,
-            Type                   = dto.Type,
-            MediaId                = dto.MediaId,
-            IsDelivered            = false,
-            SentAt                 = DateTime.UtcNow
+            IV = dto.IV,
+            Type = dto.Type,
+            MediaId = dto.MediaId,
+            IsDelivered = false,
+            SentAt = DateTime.UtcNow
         };
 
         await _messages.AddAsync(message);
@@ -108,13 +108,13 @@ public class CoupleHub : Hub
         // 4. Build the delivery payload (still ciphertext)
         var payload = new MessageDeliveryDto
         {
-            MessageId     = message.Id,
-            SenderId      = senderId,
+            MessageId = message.Id,
+            SenderId = senderId,
             EncryptedText = message.EncryptedText,
-            IV            = message.IV,
-            Type          = message.Type,
-            MediaId       = message.MediaId,
-            SentAt        = message.SentAt
+            IV = message.IV,
+            Type = message.Type,
+            MediaId = message.MediaId,
+            SentAt = message.SentAt
         };
 
         // 5. Deliver to receiver if online, else push notification
@@ -135,7 +135,7 @@ public class CoupleHub : Hub
             if (deviceTokens.Count > 0)
             {
                 // Zero-Leak safe generic text mapping
-                string pushBody = dto.Type switch 
+                string pushBody = dto.Type switch
                 {
                     MessageType.Image => "Sana bir fotoğraf gönderdi 📸",
                     MessageType.Voice => "Sana bir ses kaydı gönderdi 🎤",
@@ -177,13 +177,13 @@ public class CoupleHub : Hub
 
     public async Task ShareLocationAsync(Guid requesterId, string encryptedPayload)
     {
-        var sharerId    = GetUserId();
+        var sharerId = GetUserId();
         var connections = _connectionManager.GetConnections(requesterId);
         if (connections.Count > 0)
             await Clients.Clients(connections)
                          .SendAsync("LocationShared", new
                          {
-                             SharerId         = sharerId,
+                             SharerId = sharerId,
                              EncryptedPayload = encryptedPayload
                          });
 
@@ -192,7 +192,7 @@ public class CoupleHub : Hub
 
     public async Task DenyLocationAsync(Guid requesterId)
     {
-        var deniedById  = GetUserId();
+        var deniedById = GetUserId();
         var connections = _connectionManager.GetConnections(requesterId);
         if (connections.Count > 0)
             await Clients.Clients(connections)
@@ -205,7 +205,7 @@ public class CoupleHub : Hub
 
     public async Task MarkAsReadAsync(Guid messageId)
     {
-        var userId  = GetUserId();
+        var userId = GetUserId();
         var success = await _messages.MarkAsReadAsync(messageId, userId);
 
         if (success)
@@ -219,7 +219,7 @@ public class CoupleHub : Hub
                                  .SendAsync("MessageRead", new
                                  {
                                      MessageId = messageId,
-                                     ReadAt    = message.ReadAt
+                                     ReadAt = message.ReadAt
                                  });
             }
         }
@@ -255,7 +255,7 @@ public class CoupleHub : Hub
     {
         var senderId = GetUserId();
         var connections = _connectionManager.GetConnections(partnerId);
-        
+
         if (connections.Count > 0)
         {
             await Clients.Clients(connections)
@@ -270,12 +270,12 @@ public class CoupleHub : Hub
                 var (title, body) = vibeType switch
                 {
                     "vibe_miss_you" => ("Seni Özledi! ❤️", "Partnerin şu an seni düşünüyor."),
-                    "vibe_kiss"     => ("Bir Öpücük Geldi! 😘", "Sana kocaman bir öpücük gönderdi."),
-                    "vibe_date"     => ("Randevu Teklifi! ☕", "Bugünü beraber geçirmeye ne dersin?"),
-                    "vibe_call"     => ("Sesini Duymak İstiyor 📞", "Müsait olduğunda onu aramanı bekliyor."),
+                    "vibe_kiss" => ("Bir Öpücük Geldi! 😘", "Sana kocaman bir öpücük gönderdi."),
+                    "vibe_date" => ("Randevu Teklifi! ☕", "Bugünü beraber geçirmeye ne dersin?"),
+                    "vibe_call" => ("Sesini Duymak İstiyor 📞", "Müsait olduğunda onu aramanı bekliyor."),
                     "vibe_thinking" => ("Aklındasın... ✨", "Şu an tam da seni düşünüyor."),
                     "vibe_surprise" => ("Sürpriz! 🎁", "Sana küçük bir sürprizi var, uygulamaya bak!"),
-                    _               => ("Yeni Bir Vibe! ✨", "Sana bir etkileşim gönderdi.")
+                    _ => ("Yeni Bir Vibe! ✨", "Sana bir etkileşim gönderdi.")
                 };
 
                 await _firebase.SendPushNotificationAsync(deviceTokens, title, body);
@@ -290,7 +290,7 @@ public class CoupleHub : Hub
     public async Task SendWhoIsMoreAnswerAsync(Guid partnerId, string questionId, string answer)
     {
         var senderId = GetUserId();
-        
+
         // Save the answer in-memory
         var myKey = $"{senderId}_{questionId}";
         _whoIsMoreAnswers[myKey] = answer;
@@ -307,7 +307,7 @@ public class CoupleHub : Hub
                 // Give points
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<CoupleApp.Infrastructure.Persistence.AppDbContext>();
-                
+
                 await AddStatsAsync(db, senderId, 5, 1);
                 await AddStatsAsync(db, partnerId, 5, 1);
                 await db.SaveChangesAsync();
@@ -316,7 +316,7 @@ public class CoupleHub : Hub
                 _whoIsMoreAnswers.TryRemove(myKey, out _);
                 _whoIsMoreAnswers.TryRemove(partnerKey, out _);
             }
-            
+
             // Notify both of the match result 
             // For MVP simplicity, we just notify the current caller and let the partner know via their own incoming socket if needed, 
             // but the prompt says: "eşleşince konfeti + puan ver". 
@@ -328,9 +328,9 @@ public class CoupleHub : Hub
             await Clients.Clients(connections)
                          .SendAsync("WhoIsMoreAnswered", new
                          {
-                             SenderId   = senderId,
+                             SenderId = senderId,
                              QuestionId = questionId,
-                             Answer     = answer
+                             Answer = answer
                          });
     }
 
@@ -349,7 +349,7 @@ public class CoupleHub : Hub
     public async Task SendFlameLevelAsync(Guid partnerId, double level)
     {
         var senderId = GetUserId();
-        
+
         // Real-time broadcast
         var connections = _connectionManager.GetConnections(partnerId);
         if (connections.Count > 0)
@@ -359,7 +359,7 @@ public class CoupleHub : Hub
         // Debounce: Only save to DB if 5 minutes have passed since last record
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CoupleApp.Infrastructure.Persistence.AppDbContext>();
-        
+
         var threshold = DateTime.UtcNow.AddMinutes(-5);
         var recent = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
             System.Linq.Queryable.OrderByDescending(
@@ -382,8 +382,8 @@ public class CoupleHub : Hub
             await Clients.Clients(connections)
                          .SendAsync("RedRoomMediaReceived", new
                          {
-                             SenderId       = senderId,
-                             MediaId        = mediaId,
+                             SenderId = senderId,
+                             MediaId = mediaId,
                              TimeoutSeconds = timeoutSeconds
                          });
     }
@@ -415,19 +415,19 @@ public class CoupleHub : Hub
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CoupleApp.Infrastructure.Persistence.AppDbContext>();
         var st = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(db.UserStats, s => s.UserId == senderId);
-        
+
         if (st == null)
         {
             st = new UserStats { UserId = senderId };
             db.UserStats.Add(st);
         }
-        
+
         st.WordleTotalPlayed++;
         if (st.WordleAverageAttempts == 0)
             st.WordleAverageAttempts = attempts;
         else
             st.WordleAverageAttempts = (st.WordleAverageAttempts * (st.WordleTotalPlayed - 1) + attempts) / st.WordleTotalPlayed;
-            
+
         // Simplified streak logic (assume consecutive days for simplicity if playing)
         st.WordleCurrentStreak++;
         if (st.WordleCurrentStreak > st.WordleMaxStreak)
@@ -451,13 +451,13 @@ public class CoupleHub : Hub
     /// </summary>
     public async Task DrawStrokeAsync(Guid partnerId, DrawStrokeDto dto)
     {
-        var senderId    = GetUserId();
+        var senderId = GetUserId();
         var connections = _connectionManager.GetConnections(partnerId);
         if (connections.Count > 0)
             await Clients.Clients(connections)
                          .SendAsync("DrawStrokeReceived", new
                          {
-                             SenderId     = senderId,
+                             SenderId = senderId,
                              dto.SessionId,
                              dto.Points,
                              dto.Color,
@@ -490,8 +490,8 @@ public class CoupleHub : Hub
                          .SendAsync("DrawGuessResult", new
                          {
                              SessionId = sessionId,
-                             Correct   = correct,
-                             Score     = score,
+                             Correct = correct,
+                             Score = score,
                          });
     }
 
@@ -506,8 +506,8 @@ public class CoupleHub : Hub
     public async Task RollDiceAsync(Guid partnerId)
     {
         var senderId = GetUserId();
-        var seed     = (int)(DateTime.UtcNow.Ticks % int.MaxValue);
-        var rng      = new Random(seed);
+        var seed = (int)(DateTime.UtcNow.Ticks % int.MaxValue);
+        var rng = new Random(seed);
 
         var locations = new[]
         {
@@ -542,13 +542,13 @@ public class CoupleHub : Hub
             "Saatlerce", "Hızlıca (Quickie)", "Sen Yorulana Kadar"
         };
 
-        var picked   = positions[rng.Next(positions.Length)];
-        var result   = new DiceResultDto(
-            Location : locations[rng.Next(locations.Length)],
-            Position : picked.Name,
-            ImageKey : picked.ImageKey,
-            Duration : durations[rng.Next(durations.Length)],
-            Seed     : seed
+        var picked = positions[rng.Next(positions.Length)];
+        var result = new DiceResultDto(
+            Location: locations[rng.Next(locations.Length)],
+            Position: picked.Name,
+            ImageKey: picked.ImageKey,
+            Duration: durations[rng.Next(durations.Length)],
+            Seed: seed
         );
 
         await Clients.Caller.SendAsync("DiceResult", result);
@@ -577,7 +577,7 @@ public class CoupleHub : Hub
     public async Task SwipeFantasyAsync(Guid partnerId, string itemId, string direction)
     {
         var senderId = GetUserId();
-        var key      = $"{senderId}_{itemId}";
+        var key = $"{senderId}_{itemId}";
         _swipeStore[key] = direction;
 
         // Eşleşme kontrolü — partner de aynı kartı sağa kaydırdı mı?
@@ -612,7 +612,7 @@ public class CoupleHub : Hub
 
     public async Task GenerateRoleplayAsync(Guid partnerId)
     {
-        var rng   = new Random();
+        var rng = new Random();
         var roles = new[]
         {
             new { Role1 = "Patron",       Role2 = "Asistan",   Atmosphere = "Gece Geç Saat, Boş Ofis" },
@@ -627,7 +627,7 @@ public class CoupleHub : Hub
             new { Role1 = "Prens",        Role2 = "Prenses",   Atmosphere = "Ortaçağ Sarayı" },
         };
 
-        var pick         = roles[rng.Next(roles.Length)];
+        var pick = roles[rng.Next(roles.Length)];
         var instructions = $"Senaryo: {pick.Atmosphere}. Kural: Karakterden çıkmak yok. Güvenli kelime: 'KIRMIZI'.";
 
         // Sender'a kendi rolü, Partner'a karşı rolü gönderilir
@@ -652,14 +652,14 @@ public class CoupleHub : Hub
     /// </summary>
     public async Task SendBodyMapAsync(Guid partnerId, string pointsJson)
     {
-        var senderId     = GetUserId();
+        var senderId = GetUserId();
         var partnerConns = _connectionManager.GetConnections(partnerId);
         if (partnerConns.Count > 0)
             await Clients.Clients(partnerConns).SendAsync("BodyMapUpdated", new
             {
-                SenderId    = senderId,
-                PointsJson  = pointsJson,
-                UpdatedAt   = DateTime.UtcNow
+                SenderId = senderId,
+                PointsJson = pointsJson,
+                UpdatedAt = DateTime.UtcNow
             });
     }
 
@@ -669,21 +669,29 @@ public class CoupleHub : Hub
 
     public async Task SpinRouletteAsync(Guid partnerId)
     {
-        var rng   = new Random();
+        var rng = new Random();
         var zones = new[]
         {
             new { Zone = "Dudaklar",          ImageKey = "zone_lips"         },
             new { Zone = "Boyun",             ImageKey = "zone_neck"         },
-            new { Zone = "Göğüz Dekoltesi",   ImageKey = "zone_decolletage"  },
+            new { Zone = "Göğüs Dekoltesi",   ImageKey = "zone_decolletage"  },
             new { Zone = "Bacaklar",          ImageKey = "zone_legs"         },
             new { Zone = "Bel Kavisi",        ImageKey = "zone_waist"        },
             new { Zone = "Gözler",            ImageKey = "zone_eyes"         },
             new { Zone = "İstediğin Bir Yer", ImageKey = "zone_free"         },
             new { Zone = "Omuzlar",           ImageKey = "zone_shoulders"    },
             new { Zone = "El & Parmaklar",    ImageKey = "zone_hands"        },
+            new { Zone = "Kalçalar",          ImageKey = "zone_butt"         },
+            new { Zone = "Minnnak",           ImageKey = "zone_tiny"         },
+            new { Zone = "Ağzının İçi",       ImageKey = "zone_mouth"        },
+            new { Zone = "İç Çamaşırın",      ImageKey = "zone_underwear"    },
+            new { Zone = "Sırt",              ImageKey = "zone_back"         },
+            new { Zone = "Ayaklar",           ImageKey = "zone_feet"         },
+            new { Zone = "Bacak Arası",       ImageKey = "zone_crotch"       },
+            new { Zone = "Çıplak Vücudun",    ImageKey = "zone_naked"        },
         };
 
-        var pick    = zones[rng.Next(zones.Length)];
+        var pick = zones[rng.Next(zones.Length)];
         var payload = new RouletteResultDto(Zone: pick.Zone, ImageKey: pick.ImageKey, SpunAt: DateTime.UtcNow);
 
         await Clients.Caller.SendAsync("RouletteResult", payload);
@@ -698,14 +706,14 @@ public class CoupleHub : Hub
     /// </summary>
     public async Task SendRouletteMediaAsync(Guid partnerId, string mediaId, string zone)
     {
-        var senderId     = GetUserId();
+        var senderId = GetUserId();
         var partnerConns = _connectionManager.GetConnections(partnerId);
         if (partnerConns.Count > 0)
             await Clients.Clients(partnerConns).SendAsync("RouletteMediaReceived", new
             {
-                SenderId        = senderId,
-                MediaId         = mediaId,
-                Zone            = zone,
+                SenderId = senderId,
+                MediaId = mediaId,
+                Zone = zone,
                 DestructAfterMs = 3000
             });
     }
@@ -721,8 +729,8 @@ public class CoupleHub : Hub
         if (partnerConns.Count > 0)
             await Clients.Clients(partnerConns).SendAsync("SpotlightMoved", new
             {
-                X  = x,
-                Y  = y,
+                X = x,
+                Y = y,
                 Ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             });
     }
@@ -730,14 +738,14 @@ public class CoupleHub : Hub
     /// <summary>Karanlık Oda oturumunu başlatır — şifreli medya ID'si partnere iletilir.</summary>
     public async Task StartDarkRoomAsync(Guid partnerId, string encryptedMediaId)
     {
-        var senderId     = GetUserId();
+        var senderId = GetUserId();
         var partnerConns = _connectionManager.GetConnections(partnerId);
         if (partnerConns.Count > 0)
             await Clients.Clients(partnerConns).SendAsync("DarkRoomStarted", new
             {
-                SenderId         = senderId,
+                SenderId = senderId,
                 EncryptedMediaId = encryptedMediaId,
-                StartedAt        = DateTime.UtcNow
+                StartedAt = DateTime.UtcNow
             });
 
         _logger.LogInformation("[RedRoom] DarkRoom started: {Sender}→{Partner}", senderId, partnerId);
@@ -751,7 +759,7 @@ public class CoupleHub : Hub
             await Clients.Clients(partnerConns).SendAsync("HeatmapUpdated", new
             {
                 HeatmapJson = heatmapJson,
-                UpdatedAt   = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                UpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             });
     }
 
@@ -765,9 +773,9 @@ public class CoupleHub : Hub
     /// </summary>
     public async Task TriggerSafeWordAsync(Guid partnerId)
     {
-        var senderId     = GetUserId();
+        var senderId = GetUserId();
         var partnerConns = _connectionManager.GetConnections(partnerId);
-        var payload      = new { SenderId = senderId, TriggeredAt = DateTime.UtcNow };
+        var payload = new { SenderId = senderId, TriggeredAt = DateTime.UtcNow };
 
         await Clients.Caller.SendAsync("SafeWordTriggered", payload);
         if (partnerConns.Count > 0)
@@ -804,23 +812,23 @@ public record SendMessageDto(
 
 public record MessageDeliveryDto
 {
-    public Guid MessageId       { get; init; }
-    public Guid SenderId        { get; init; }
+    public Guid MessageId { get; init; }
+    public Guid SenderId { get; init; }
     public string EncryptedText { get; init; } = string.Empty;
-    public string? IV           { get; init; }
-    public string? MediaId      { get; init; }
-    public MessageType Type     { get; init; }
-    public DateTime SentAt      { get; init; }
+    public string? IV { get; init; }
+    public string? MediaId { get; init; }
+    public MessageType Type { get; init; }
+    public DateTime SentAt { get; init; }
 }
 
 public record DrawPointDto(double X, double Y);
 
 public record DrawStrokeDto(
-    Guid               SessionId,
+    Guid SessionId,
     List<DrawPointDto> Points,
-    string             Color,
-    double             StrokeWidth,
-    bool               IsEraser = false
+    string Color,
+    double StrokeWidth,
+    bool IsEraser = false
 );
 
 // ── Red Room DTOs ──────────────────────────────────────────────────────────
@@ -831,7 +839,7 @@ public record DiceResultDto(
     string Position,
     string ImageKey,
     string Duration,
-    int    Seed
+    int Seed
 );
 
 /// <summary>Pozisyon listesi için iç yardımcı kayıt.</summary>
@@ -847,13 +855,13 @@ public record RoleplayDto(
 
 /// <summary>Red Match eşleşme bildirimi.</summary>
 public record RedMatchDto(
-    string   ItemId,
+    string ItemId,
     DateTime MatchedAt
 );
 
 /// <summary>Snapshot Roulette zone sonucu.</summary>
 public record RouletteResultDto(
-    string   Zone,
-    string   ImageKey,
+    string Zone,
+    string ImageKey,
     DateTime SpunAt
 );

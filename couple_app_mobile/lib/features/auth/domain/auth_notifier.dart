@@ -8,7 +8,8 @@ import '../../../core/config/app_config.dart';
 import '../../../core/services/firebase_messaging_service.dart';
 import '../../crypto/crypto_provider.dart';
 
-final localAuthProvider  = Provider<LocalAuthentication>((_) => LocalAuthentication());
+final localAuthProvider =
+    Provider<LocalAuthentication>((_) => LocalAuthentication());
 
 // The Dio provider with Interceptor attached
 final dioProvider = Provider<Dio>((ref) {
@@ -18,7 +19,8 @@ final dioProvider = Provider<Dio>((ref) {
     receiveTimeout: const Duration(seconds: 10),
   ));
 
-  dio.interceptors.add(AuthInterceptor(dio, ref.read(secureStorageProvider), ref));
+  dio.interceptors
+      .add(AuthInterceptor(dio, ref.read(secureStorageProvider), ref));
   return dio;
 });
 
@@ -30,7 +32,8 @@ class AuthInterceptor extends Interceptor {
   AuthInterceptor(this.dio, this.storage, this.ref);
 
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+  void onRequest(
+      RequestOptions options, RequestInterceptorHandler handler) async {
     final token = await storage.read(key: 'access_token');
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
@@ -47,9 +50,8 @@ class AuthInterceptor extends Interceptor {
         try {
           // Send request with an isolated Dio instance to prevent interceptor loop
           final refreshDio = Dio(BaseOptions(baseUrl: AppConfig.apiUrl));
-          final res = await refreshDio.post('/Auth/refresh', data: {
-            'refreshToken': refreshToken
-          });
+          final res = await refreshDio
+              .post('/Auth/refresh', data: {'refreshToken': refreshToken});
 
           final newAccess = res.data['accessToken'];
           final newRefresh = res.data['refreshToken'];
@@ -72,7 +74,7 @@ class AuthInterceptor extends Interceptor {
             data: err.requestOptions.data,
             queryParameters: err.requestOptions.queryParameters,
           );
-          
+
           return handler.resolve(cloneReq);
         } catch (_) {
           // Token rotation failed or refresh token expired -> Logout
@@ -110,7 +112,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final token = await _storage.read(key: 'access_token');
       if (token != null) {
         state = state.copyWith(
-          status:      AuthStatus.biometricPending,
+          status: AuthStatus.biometricPending,
           accessToken: token,
         );
       } else {
@@ -119,7 +121,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       // Keystore corruption on Android can cause .read() to throw.
       // Clear storage and fallback to unauthenticated.
-      try { await _storage.deleteAll(); } catch (_) {}
+      try {
+        await _storage.deleteAll();
+      } catch (_) {}
       state = state.copyWith(status: AuthStatus.unauthenticated);
     }
   }
@@ -136,7 +140,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       final didAuth = await _localAuth.authenticate(
         localizedReason: 'CoupleApp\'a erişmek için kimliğini doğrula',
-        options: const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
+        options:
+            const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
       );
 
       if (didAuth) await _loadUserFromStorage();
@@ -148,13 +153,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _loadUserFromStorage() async {
-    final userId   = await _storage.read(key: 'user_id');
+    final userId = await _storage.read(key: 'user_id');
     final username = await _storage.read(key: 'username');
-    final token    = await _storage.read(key: 'access_token');
+    final token = await _storage.read(key: 'access_token');
     state = state.copyWith(
-      status:      AuthStatus.authenticated,
-      userId:      userId,
-      username:    username,
+      status: AuthStatus.authenticated,
+      userId: userId,
+      username: username,
       accessToken: token,
     );
     // Sync Public Key with the server so E2EE always works
@@ -169,7 +174,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       // Kripto servisinin tamamen initiate olmasını (key generation) bekle
       await _ref.read(cryptoInitProvider.future);
-      
+
       final cryptoService = _ref.read(cryptoServiceProvider);
       final pubKey = cryptoService.publicKeyPem;
       if (pubKey.isNotEmpty) {
@@ -203,23 +208,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final res = await _dio.post('/Auth/login',
           data: {'username': username, 'password': password});
-      final token     = res.data['accessToken'] as String;
-      final refresh   = res.data['refreshToken'] as String;
-      final userId    = res.data['id']           as String;
-      final uname     = res.data['username']     as String;
+      final token = res.data['accessToken'] as String;
+      final refresh = res.data['refreshToken'] as String;
+      final userId = res.data['id'] as String;
+      final uname = res.data['username'] as String;
       await _storage.write(key: 'access_token', value: token);
       await _storage.write(key: 'refresh_token', value: refresh);
-      await _storage.write(key: 'user_id',      value: userId);
-      await _storage.write(key: 'username',     value: uname);
+      await _storage.write(key: 'user_id', value: userId);
+      await _storage.write(key: 'username', value: uname);
       state = state.copyWith(
-        status:      AuthStatus.authenticated,
+        status: AuthStatus.authenticated,
         accessToken: token,
-        userId:      userId,
-        username:    uname,
+        userId: userId,
+        username: uname,
       );
       // Backend'e her girişte mutlaka public-key senkronizasyonu yap
       await _syncPublicKey();
-      
+
       // Partner bilgisini yükle
       await _fetchPartner(token);
       await _registerDeviceToken(token);
@@ -231,13 +236,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> register(String username, String password) async {
     try {
-      final cryptoService = _ref.read(cryptoServiceProvider); // Load crypto keys before registering
-      await _dio.post('/Auth/register',
-          data: {
-            'username': username, 
-            'password': password,
-            'publicKey': cryptoService.publicKeyPem // Send immediately on register
-          });
+      final cryptoService = _ref
+          .read(cryptoServiceProvider); // Load crypto keys before registering
+      await _dio.post('/Auth/register', data: {
+        'username': username,
+        'password': password,
+        'publicKey': cryptoService.publicKeyPem // Send immediately on register
+      });
       await login(username, password);
     } on DioException catch (e) {
       state = state.copyWith(
@@ -245,34 +250,53 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-
   Future<void> _registerDeviceToken(String? accessToken) async {
-    if (accessToken == null) return;
+    if (accessToken == null) {
+      print("🚨 FCM: Access Token null, işlem iptal.");
+      return;
+    }
+
     try {
+      print("🚀 FCM: Token alma işlemi başlıyor...");
       final fcmService = FirebaseMessagingService();
-      await fcmService.initialize();
+      await fcmService.initialize(); // İzinler burada mı isteniyor kontrol et!
+
       final deviceToken = await fcmService.getToken();
-      
+      print("✅ FCM: Google'dan alınan cihaz tokenı: $deviceToken");
+
       if (deviceToken != null) {
         final platform = Platform.isIOS ? 'ios' : 'android';
-        await _dio.post('/Auth/device-token', data: {
-          'token': deviceToken,
-          'platform': platform
-        });
+        print("🚀 FCM: Backend'e yollanıyor... Endpoint: /Auth/device-token");
+
+        final response = await _dio.post('/Auth/device-token',
+            data: {'token': deviceToken, 'platform': platform});
+
+        print(
+            "✅ FCM: Backend token'ı başarıyla kaydetti! Cevap: ${response.statusCode}");
+      } else {
+        print(
+            "❌ FCM: Google cihaz token'ını NULL döndürdü! (İzin verilmemiş olabilir)");
       }
 
-      // Background listener for token rotation silently updating backend
+      // Background listener
       fcmService.onTokenRefresh.listen((newToken) async {
         try {
+          print("🔄 FCM: Token yenilendi: $newToken");
           final platform = Platform.isIOS ? 'ios' : 'android';
-          await _dio.post('/Auth/device-token', data: {
-            'token': newToken,
-            'platform': platform
-          });
-        } catch (_) {}
+          await _dio.post('/Auth/device-token',
+              data: {'token': newToken, 'platform': platform});
+        } catch (e) {
+          print("❌ FCM: Yenilenen token backend'e yollanamadı: $e");
+        }
       });
-    } catch (_) {
-      // Non-blocking fallback if Firebase throws exceptions
+    } on DioException catch (e) {
+      // Backend'den dönen hataları burada yakalayacağız!
+      print(
+          "❌ FCM DİKKAT: Backend isteği patladı! Status: ${e.response?.statusCode}");
+      print("❌ FCM DİKKAT: Hata Detayı: ${e.response?.data}");
+    } catch (e) {
+      // Firebase veya başka bir kod hatası
+      print("❌ FCM DİKKAT: Beklenmeyen bir hata oluştu: $e");
     }
   }
 
@@ -288,8 +312,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final res = await dio.get('/couple/partner');
       final data = res.data as Map<String, dynamic>;
       state = state.copyWith(
-        partnerId:        data['id']?.toString(),
-        partnerName:      data['username']?.toString(),
+        partnerId: data['id']?.toString(),
+        partnerName: data['username']?.toString(),
         partnerPublicKey: data['publicKey']?.toString(),
       );
     } catch (_) {
@@ -333,4 +357,3 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 }
-

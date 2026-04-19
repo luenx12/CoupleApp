@@ -23,7 +23,7 @@ import '../../../../core/theme/app_theme.dart';
 const _zoneEmoji = <String, String>{
   'Dudaklar': '👄',
   'Boyun': '🦢',
-  'Göğüz Dekoltesi': '💎',
+  'Göğüs Dekoltesi': '💎',
   'Bacaklar': '🦵',
   'Bel Kavisi': '〰️',
   'Gözler': '👁️',

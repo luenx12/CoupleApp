@@ -58,6 +58,11 @@ typedef DarkRoomHandler         = void Function(Map<String, dynamic> payload);
 typedef SpotlightMovedHandler   = void Function(double x, double y, int ts);
 typedef HeatmapUpdatedHandler   = void Function(String heatmapJson);
 
+// ── Fantasy Board handlers ─────────────────────────────────────────────────
+typedef FantasyBoardHandler = void Function(Map<String, dynamic> payload);
+typedef FantasyVoteHandler  = void Function(String boardId, String cardId);
+typedef FantasyMatchHandler = void Function(String boardId, String cardId);
+
 class SignalRService {
   SignalRService(this._ref);
 
@@ -108,6 +113,11 @@ class SignalRService {
   DarkRoomHandler?       onDarkRoomStarted;
   SpotlightMovedHandler? onSpotlightMoved;
   HeatmapUpdatedHandler? onHeatmapUpdated;
+
+  // ── Fantasy Board Callbacks ────────────────────────────────────────────
+  FantasyBoardHandler? onFantasyBoardReceived;
+  FantasyVoteHandler?  onPartnerVotedFantasyCard;
+  FantasyMatchHandler? onFantasyCardMatched;
 
   // ── Current connection status (publicly readable) ─────────────────────
   HubConnectionStatus get status =>
@@ -396,6 +406,31 @@ class SignalRService {
       onHeatmapUpdated?.call(heatmapJson);
     });
 
+    // ── Fantasy Board Events ─────────────────────────────────────────────────
+
+    _hub!.on('FantasyBoardReceived', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args[0];
+      final dto = (raw is Map) ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      onFantasyBoardReceived?.call(dto);
+    });
+
+    _hub!.on('PartnerVotedFantasyCard', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw    = args[0] as Map?;
+      final boardId = raw?['boardId']?.toString() ?? '';
+      final cardId  = raw?['cardId']?.toString() ?? '';
+      onPartnerVotedFantasyCard?.call(boardId, cardId);
+    });
+
+    _hub!.on('FantasyCardMatched', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw    = args[0] as Map?;
+      final boardId = raw?['boardId']?.toString() ?? '';
+      final cardId  = raw?['cardId']?.toString() ?? '';
+      onFantasyCardMatched?.call(boardId, cardId);
+    });
+
     // ── Start ────────────────────────────────────────────────────────────
 
     try {
@@ -556,6 +591,22 @@ class SignalRService {
   Future<void> triggerSafeWord(String partnerId) async {
     if (_hub?.state != HubConnectionState.Connected) return;
     await _hub!.invoke('TriggerSafeWordAsync', args: [partnerId]);
+  }
+
+  // ── Fantasy Board Sends ───────────────────────────────────────────────────
+
+  Future<void> triggerFantasyBoard(
+      String partnerId, String boardId, String boardPayloadJson) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('TriggerFantasyBoardAsync',
+        args: [partnerId, boardId, boardPayloadJson]);
+  }
+
+  Future<void> voteFantasyCard(
+      String partnerId, String boardId, String cardId) async {
+    if (_hub?.state != HubConnectionState.Connected) return;
+    await _hub!.invoke('VoteFantasyCardAsync',
+        args: [partnerId, boardId, cardId]);
   }
 
   // ── DrawGame Sends ────────────────────────────────────────────────────────

@@ -153,14 +153,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _loadUserFromStorage() async {
-    final userId = await _storage.read(key: 'user_id');
+    final userId   = await _storage.read(key: 'user_id');
     final username = await _storage.read(key: 'username');
-    final token = await _storage.read(key: 'access_token');
+    final token    = await _storage.read(key: 'access_token');
+    final genderStr = await _storage.read(key: 'my_gender');
     state = state.copyWith(
-      status: AuthStatus.authenticated,
-      userId: userId,
-      username: username,
+      status:      AuthStatus.authenticated,
+      userId:      userId,
+      username:    username,
       accessToken: token,
+      myGender:    int.tryParse(genderStr ?? '0') ?? 0,
     );
     // Sync Public Key with the server so E2EE always works
     await _syncPublicKey();
@@ -208,19 +210,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final res = await _dio.post('/Auth/login',
           data: {'username': username, 'password': password});
-      final token = res.data['accessToken'] as String;
-      final refresh = res.data['refreshToken'] as String;
-      final userId = res.data['id'] as String;
-      final uname = res.data['username'] as String;
+      final token   = res.data['accessToken'] as String;
+      final refresh  = res.data['refreshToken'] as String;
+      final userId   = res.data['id'] as String;
+      final uname    = res.data['username'] as String;
+      final gender   = res.data['gender'] as int? ?? 0;
       await _storage.write(key: 'access_token', value: token);
       await _storage.write(key: 'refresh_token', value: refresh);
       await _storage.write(key: 'user_id', value: userId);
       await _storage.write(key: 'username', value: uname);
+      await _storage.write(key: 'my_gender', value: gender.toString());
       state = state.copyWith(
-        status: AuthStatus.authenticated,
+        status:      AuthStatus.authenticated,
         accessToken: token,
-        userId: userId,
-        username: uname,
+        userId:      userId,
+        username:    uname,
+        myGender:    gender,
       );
       // Backend'e her girişte mutlaka public-key senkronizasyonu yap
       await _syncPublicKey();
@@ -312,9 +317,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final res = await dio.get('/couple/partner');
       final data = res.data as Map<String, dynamic>;
       state = state.copyWith(
-        partnerId: data['id']?.toString(),
-        partnerName: data['username']?.toString(),
+        partnerId:        data['id']?.toString(),
+        partnerName:      data['username']?.toString(),
         partnerPublicKey: data['publicKey']?.toString(),
+        partnerGender:    data['gender'] as int? ?? 0,
       );
     } catch (_) {
       // If no partner is found or request fails, clear partner data
@@ -354,6 +360,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Kullanıcının cinsiyetini günceller ve backend'e kaydeder.
+  Future<void> updateGender(int gender) async {
+    try {
+      await _dio.put('/Auth/gender', data: {'gender': gender});
+      await _storage.write(key: 'my_gender', value: gender.toString());
+      state = state.copyWith(myGender: gender);
+    } catch (_) {
+      // Sessizce geç — SettingsScreen'de hata gösterilebilir
     }
   }
 }

@@ -148,35 +148,35 @@ namespace CoupleApp.Backend.Migrations
                         {
                             Id = new Guid("20000001-0000-0000-0000-000000000001"),
                             Category = "Genel",
-                            CreatedAt = new DateTime(2026, 4, 12, 12, 55, 48, 770, DateTimeKind.Utc).AddTicks(9733),
+                            CreatedAt = new DateTime(2026, 4, 24, 19, 3, 17, 962, DateTimeKind.Utc).AddTicks(8129),
                             QuestionText = "Kim daha çok uyur?"
                         },
                         new
                         {
                             Id = new Guid("20000001-0000-0000-0000-000000000002"),
                             Category = "Yetenek",
-                            CreatedAt = new DateTime(2026, 4, 12, 12, 55, 48, 770, DateTimeKind.Utc).AddTicks(9749),
+                            CreatedAt = new DateTime(2026, 4, 24, 19, 3, 17, 962, DateTimeKind.Utc).AddTicks(8145),
                             QuestionText = "Kim daha iyi yemek yapar?"
                         },
                         new
                         {
                             Id = new Guid("20000001-0000-0000-0000-000000000003"),
                             Category = "İlişki",
-                            CreatedAt = new DateTime(2026, 4, 12, 12, 55, 48, 770, DateTimeKind.Utc).AddTicks(9750),
+                            CreatedAt = new DateTime(2026, 4, 24, 19, 3, 17, 962, DateTimeKind.Utc).AddTicks(8148),
                             QuestionText = "Kim daha romantiktir?"
                         },
                         new
                         {
                             Id = new Guid("20000001-0000-0000-0000-000000000004"),
                             Category = "Günlük",
-                            CreatedAt = new DateTime(2026, 4, 12, 12, 55, 48, 770, DateTimeKind.Utc).AddTicks(9752),
+                            CreatedAt = new DateTime(2026, 4, 24, 19, 3, 17, 962, DateTimeKind.Utc).AddTicks(8162),
                             QuestionText = "Kim daha sakardır?"
                         },
                         new
                         {
                             Id = new Guid("20000001-0000-0000-0000-000000000005"),
                             Category = "Finans",
-                            CreatedAt = new DateTime(2026, 4, 12, 12, 55, 48, 770, DateTimeKind.Utc).AddTicks(9754),
+                            CreatedAt = new DateTime(2026, 4, 24, 19, 3, 17, 962, DateTimeKind.Utc).AddTicks(8164),
                             QuestionText = "Kim daha çok para harcar?"
                         });
                 });
@@ -640,6 +640,9 @@ namespace CoupleApp.Backend.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Gender")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("LastSeenAt")
                         .HasColumnType("timestamp with time zone");

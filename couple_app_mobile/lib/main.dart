@@ -8,11 +8,13 @@ import 'features/crypto/crypto_provider.dart';
 import 'screens/biometric_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_screen.dart';
+import 'features/chat/domain/fantasy_board_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Ağ bağlantısı izlemeyi başlat (offline-first outbox queue)
   await ConnectivityService.instance.init();
+  await FantasyBoardPayload.loadTasks(); // Load fantasy tasks JSON
   runApp(const ProviderScope(child: CoupleApp()));
 }
 

@@ -2,7 +2,7 @@
 // MessageModel — Domain model for local chat messages
 // ═══════════════════════════════════════════════════════════════════════════════
 
-enum MsgType { text, image, voice }
+enum MsgType { text, image, voice, fantasyBoard }
 
 /// Optimistic UI gönderim durumu
 enum SendStatus { sent, pending, failed }

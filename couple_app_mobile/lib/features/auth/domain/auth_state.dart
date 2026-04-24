@@ -19,6 +19,8 @@ class AuthState {
     this.partnerId,
     this.partnerName,
     this.partnerPublicKey,
+    this.myGender = 0,
+    this.partnerGender = 0,
   });
 
   final AuthStatus status;
@@ -32,6 +34,10 @@ class AuthState {
   final String? partnerName;
   final String? partnerPublicKey;
 
+  /// Cinsiyet: 0=Belirtilmemiş, 1=Kadın, 2=Erkek
+  final int myGender;
+  final int partnerGender;
+
   AuthState copyWith({
     AuthStatus? status,
     String? userId,
@@ -41,6 +47,8 @@ class AuthState {
     String? partnerId,
     String? partnerName,
     String? partnerPublicKey,
+    int? myGender,
+    int? partnerGender,
   }) =>
       AuthState(
         status:           status           ?? this.status,
@@ -51,6 +59,8 @@ class AuthState {
         partnerId:        partnerId        ?? this.partnerId,
         partnerName:      partnerName      ?? this.partnerName,
         partnerPublicKey: partnerPublicKey ?? this.partnerPublicKey,
+        myGender:         myGender         ?? this.myGender,
+        partnerGender:    partnerGender    ?? this.partnerGender,
       );
 }
 

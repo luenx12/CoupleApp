@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
@@ -14,6 +15,8 @@ import '../../../core/services/connectivity_service.dart';
 import '../data/chat_repository.dart';
 import '../data/media_api_service.dart';
 import '../data/signalr_service.dart';
+import '../domain/fantasy_board_model.dart';
+import '../domain/fantasy_board_notifier.dart';
 import '../domain/message_model.dart';
 
 
@@ -142,6 +145,11 @@ class ChatNotifier extends StateNotifier<ChatState> {
     signalR.onMessage       = _onIncomingMessage;
     signalR.onPartnerTyping = _onPartnerTyping;
 
+    // Fantasy Board callbacks
+    signalR.onFantasyBoardReceived      = _onFantasyBoardReceived;
+    signalR.onPartnerVotedFantasyCard   = _onPartnerVotedFantasyCard;
+    signalR.onFantasyCardMatched        = _onFantasyCardMatched;
+
     // ✅ KEY FIX: flush outbox whenever SignalR successfully connects/reconnects
     signalR.onReconnected = _onSignalRReconnected;
 
@@ -266,6 +274,71 @@ class ChatNotifier extends StateNotifier<ChatState> {
     } catch (e) {
       state = state.copyWith(isSending: false, error: e.toString());
     }
+  }
+
+  // ── Fantasy Board ─────────────────────────────────────────────────────────
+
+  /// Chat input bar’daki 🔥 butonu buna bağlıdır.
+  Future<void> triggerFantasyBoard() async {
+    final auth         = ref.read(authNotifierProvider);
+    final partnerId    = auth.partnerId ?? '';
+    final partnerGender = auth.partnerGender;
+    if (partnerId.isEmpty) return;
+
+    // Benzersiz board ID
+    final boardId = '${myId.substring(0, 8)}_${DateTime.now().millisecondsSinceEpoch}';
+
+    // Cinsiyete göre 3 kart seç (her kategoriden 1)
+    final payload = FantasyBoardPayload.generateForGender(boardId, partnerGender);
+    final jsonStr = payload.toJsonString();
+
+    // Local mesaj olarak ekle (isMine = true)
+    final msg = MessageModel(
+      id:          boardId,
+      senderId:    myId,
+      receiverId:  partnerId,
+      plainText:   jsonStr,
+      type:        MsgType.fantasyBoard,
+      sentAt:      DateTime.now(),
+      isMine:      true,
+    );
+    state = state.copyWith(messages: [...state.messages, msg]);
+
+    // SignalR üzerinden gönder
+    try {
+      await signalR.triggerFantasyBoard(partnerId, boardId, jsonStr);
+    } catch (_) {}
+  }
+
+  /// Partner’ın tetiklediği board geldi.
+  void _onFantasyBoardReceived(Map<String, dynamic> dto) {
+    if (!mounted) return;
+    final boardId      = dto['boardId']?.toString() ?? '';
+    final payloadJson  = dto['boardPayloadJson']?.toString() ?? '';
+    if (boardId.isEmpty) return;
+
+    final msg = MessageModel(
+      id:         boardId,
+      senderId:   partnerId,
+      receiverId: myId,
+      plainText:  payloadJson,
+      type:       MsgType.fantasyBoard,
+      sentAt:     DateTime.now(),
+      isMine:     false,
+    );
+    state = state.copyWith(messages: [...state.messages, msg]);
+  }
+
+  /// Partner bir karta oy verdi.
+  void _onPartnerVotedFantasyCard(String boardId, String cardId) {
+    if (!mounted) return;
+    ref.read(fantasyBoardProvider(boardId).notifier).onPartnerVote(cardId);
+  }
+
+  /// Sunucu eşleşmeyi onayladı.
+  void _onFantasyCardMatched(String boardId, String cardId) {
+    if (!mounted) return;
+    ref.read(fantasyBoardProvider(boardId).notifier).onMatch(cardId);
   }
 
   // ── Incoming Message ──────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ import '../../location/domain/location_notifier.dart';
 import '../data/signalr_service.dart';
 import '../domain/chat_notifier.dart';
 import '../domain/message_model.dart';
+import 'fantasy_board_bubble.dart';
 import 'message_bubble.dart';
 import 'media_bubble.dart';
 
@@ -118,7 +119,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final source = await _showMediaSourceDialog();
     if (source == null) return;
 
-    final file = await _imagePicker.pickImage(source: source, imageQuality: 80);
+    XFile? file;
+    if (source == 'gallery') {
+      file = await _imagePicker.pickMedia(imageQuality: 80);
+    } else if (source == 'camera_photo') {
+      file = await _imagePicker.pickImage(source: ImageSource.camera, imageQuality: 80);
+    } else if (source == 'camera_video') {
+      file = await _imagePicker.pickVideo(source: ImageSource.camera, maxDuration: const Duration(minutes: 5));
+    }
+
     if (file == null) return;
 
     HapticFeedback.mediumImpact();
@@ -126,8 +135,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _scrollToBottom();
   }
 
-  Future<ImageSource?> _showMediaSourceDialog() async {
-    return showModalBottomSheet<ImageSource>(
+  Future<String?> _showMediaSourceDialog() async {
+    return showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppColors.card,
       shape: const RoundedRectangleBorder(
@@ -142,12 +151,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               _MediaSourceBtn(
                 icon: Icons.photo_library_rounded,
                 label: 'Galeri',
-                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+                onTap: () => Navigator.pop(ctx, 'gallery'),
               ),
               _MediaSourceBtn(
                 icon: Icons.camera_alt_rounded,
-                label: 'Kamera',
-                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+                label: 'Foto Çek',
+                onTap: () => Navigator.pop(ctx, 'camera_photo'),
+              ),
+              _MediaSourceBtn(
+                icon: Icons.videocam_rounded,
+                label: 'Video Çek',
+                onTap: () => Navigator.pop(ctx, 'camera_video'),
               ),
             ],
           ),
@@ -255,12 +269,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ),
               // ── Input bar ────────────────────────────────────────────────
               _InputBar(
-                controller: _controller,
-                focusNode:  _focusNode,
-                isSending:  chatState.isSending,
-                onChanged:  _onTextChanged,
-                onSend:     _sendText,
-                onMedia:    _pickAndSendMedia,
+                controller:     _controller,
+                focusNode:      _focusNode,
+                isSending:      chatState.isSending,
+                onChanged:      _onTextChanged,
+                onSend:         _sendText,
+                onMedia:        _pickAndSendMedia,
+                onFantasyBoard: () => ref.read(chatNotifierProvider.notifier).triggerFantasyBoard(),
               ),
             ],
           ),
@@ -270,9 +285,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   Widget _buildMessageItem(MessageModel msg) {
+    if (msg.type == MsgType.fantasyBoard) {
+      return FantasyBoardBubble(
+        key:        ValueKey('fb_${msg.id}'),
+        boardId:    msg.id,
+        payloadJson: msg.plainText,
+      );
+    }
     if (msg.type == MsgType.image) {
       return MediaBubble(
-        key: ValueKey(msg.id),
+        key:   ValueKey(msg.id),
         message: msg,
         onViewed: () => ref.read(chatNotifierProvider.notifier).onMediaViewed(msg),
         onDownloadRequest: () =>
@@ -473,6 +495,7 @@ class _InputBar extends StatelessWidget {
     required this.onChanged,
     required this.onSend,
     required this.onMedia,
+    required this.onFantasyBoard,
   });
 
   final TextEditingController controller;
@@ -481,6 +504,7 @@ class _InputBar extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final VoidCallback onSend;
   final VoidCallback onMedia;
+  final VoidCallback onFantasyBoard;
 
   @override
   Widget build(BuildContext context) {
@@ -500,6 +524,13 @@ class _InputBar extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          // 🔥 Fantasy Board butonu
+          IconButton(
+            onPressed: isSending ? null : onFantasyBoard,
+            icon: const Icon(Icons.local_fire_department_rounded),
+            color: const Color(0xFFC9A84C),
+            tooltip: 'Fantezi Masası',
+          ),
           // Media button
           IconButton(
             onPressed: isSending ? null : onMedia,

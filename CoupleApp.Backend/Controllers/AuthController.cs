@@ -40,7 +40,8 @@ public class AuthController : ControllerBase
         {
             Username     = dto.Username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-            PublicKey    = dto.PublicKey
+            PublicKey    = dto.PublicKey,
+            Gender       = dto.Gender
         };
 
         await _users.AddAsync(user);
@@ -80,7 +81,8 @@ public class AuthController : ControllerBase
             RefreshToken = plainRefreshToken,
             user.Id, 
             user.Username, 
-            user.PublicKey 
+            user.PublicKey,
+            user.Gender
         });
     }
 
@@ -92,7 +94,7 @@ public class AuthController : ControllerBase
         var userId = GetUserId();
         var user   = await _users.GetByIdAsync(userId);
         if (user is null) return NotFound();
-        return Ok(new { user.Id, user.Username, user.PublicKey });
+        return Ok(new { user.Id, user.Username, user.PublicKey, user.Gender });
     }
 
     /// <summary>Returns the partner (the only other user in the DB for this 2-person app).</summary>
@@ -201,6 +203,20 @@ public class AuthController : ControllerBase
         return Ok();
     }
 
+    /// <summary>Kullanıcının cinsiyetini günceller. 1=Kadın, 2=Erkek</summary>
+    [HttpPut("gender")]
+    [Authorize]
+    public async Task<IActionResult> UpdateGender([FromBody] GenderDto dto)
+    {
+        var userId = GetUserId();
+        var user = await _users.GetByIdAsync(userId);
+        if (user is null) return NotFound();
+
+        user.Gender = dto.Gender;
+        await _users.SaveChangesAsync();
+        return Ok(new { user.Gender });
+    }
+
     /// <summary>Logs out the user, clearing refresh tokens and device push tokens.</summary>
     [HttpPost("logout")]
     [Authorize]
@@ -266,8 +282,9 @@ public class AuthController : ControllerBase
     }
 }
 
-public record RegisterDto(string Username, string Password, string? PublicKey);
+public record RegisterDto(string Username, string Password, string? PublicKey, int Gender = 0);
 public record LoginDto(string Username, string Password);
 public record RefreshDto(string RefreshToken);
 public record DeviceTokenDto(string Token, string Platform);
 public record PublicKeyDto(string PublicKey);
+public record GenderDto(int Gender);

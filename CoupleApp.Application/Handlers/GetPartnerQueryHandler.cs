@@ -36,6 +36,7 @@ public class GetPartnerQueryHandler : IRequestHandler<GetPartnerQuery, UserDto?>
         return new UserDto(
             partner.Id,
             partner.Username,
-            partner.PublicKey);
+            partner.PublicKey,
+            partner.Gender);
     }
 }

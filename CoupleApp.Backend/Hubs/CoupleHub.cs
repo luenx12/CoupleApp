@@ -784,9 +784,92 @@ public class CoupleHub : Hub
         _logger.LogWarning("[RedRoom] ⚠️ SAFE WORD triggered by {UserId}!", senderId);
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    // 🔥 FANTASY BOARD — Fantezi Masası
+    // ══════════════════════════════════════════════════════════════════════
+
+    // In-memory vote store — key: "boardId_userId", value: "cardId"
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string>
+        _fantasyVotes = new();
+
+    /// <summary>
+    /// Her iki cihaza 3'lü görev zarflarını düşürür.
+    /// Payload içeriği tamamen client tarafından oluşturulur (Zero-Leak: sunucu bakmaz).
+    /// </summary>
+    public async Task TriggerFantasyBoardAsync(Guid partnerId, string boardId, string boardPayloadJson)
+    {
+        var senderId = GetUserId();
+
+        var payload = new FantasyBoardTriggeredDto(
+            BoardId: boardId,
+            BoardPayloadJson: boardPayloadJson,
+            TriggeredAt: DateTime.UtcNow);
+
+        // Caller (tetikleyen kişi) de alır
+        await Clients.Caller.SendAsync("FantasyBoardReceived", payload);
+
+        var partnerConns = _connectionManager.GetConnections(partnerId);
+        if (partnerConns.Count > 0)
+            await Clients.Clients(partnerConns).SendAsync("FantasyBoardReceived", payload);
+        else
+        {
+            var deviceTokens = await _users.GetDeviceTokensAsync(partnerId);
+            if (deviceTokens.Count > 0)
+                await _firebase.SendPushNotificationAsync(deviceTokens,
+                    "Fantezi Masası Geldi! 🔥",
+                    "Partnerin sana özel bir görev zarfı gönderdi.");
+        }
+
+        _logger.LogInformation("[FantasyBoard] Triggered: {Sender}→{Partner} BoardId={BoardId}",
+            senderId, partnerId, boardId);
+    }
+
+    /// <summary>
+    /// Bir kişi karta oy verdiğinde diğerine bildirir.
+    /// Sunucu tarafında match kontrolü yapar; eşleşirse FantasyCardMatched tetikler.
+    /// </summary>
+    public async Task VoteFantasyCardAsync(Guid partnerId, string boardId, string cardId)
+    {
+        var senderId = GetUserId();
+
+        // Oyu kaydet
+        var myKey = $"{boardId}_{senderId}";
+        _fantasyVotes[myKey] = cardId;
+
+        // Partner oyu var mı kontrol et
+        var partnerKey = $"{boardId}_{partnerId}";
+        bool isMatch = _fantasyVotes.TryGetValue(partnerKey, out var partnerCardId)
+                       && partnerCardId == cardId;
+
+        // Partnere "biri oy verdi" bildir
+        var partnerConns = _connectionManager.GetConnections(partnerId);
+        if (partnerConns.Count > 0)
+            await Clients.Clients(partnerConns).SendAsync("PartnerVotedFantasyCard", new FantasyVoteDto(
+                SenderId: senderId.ToString(),
+                BoardId: boardId,
+                CardId: cardId));
+
+        if (isMatch)
+        {
+            // Oylama tamamlandı — her iki tarafı da bildir
+            _fantasyVotes.TryRemove(myKey, out _);
+            _fantasyVotes.TryRemove(partnerKey, out _);
+
+            var matchPayload = new FantasyMatchDto(BoardId: boardId, CardId: cardId, MatchedAt: DateTime.UtcNow);
+
+            await Clients.Caller.SendAsync("FantasyCardMatched", matchPayload);
+            if (partnerConns.Count > 0)
+                await Clients.Clients(partnerConns).SendAsync("FantasyCardMatched", matchPayload);
+
+            _logger.LogInformation("[FantasyBoard] MATCH! {A}↔{B} | Board={BoardId} Card={CardId}",
+                senderId, partnerId, boardId, cardId);
+        }
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────
+
 
     private Guid GetUserId()
     {
@@ -865,3 +948,27 @@ public record RouletteResultDto(
     string ImageKey,
     DateTime SpunAt
 );
+
+// ── Fantasy Board DTOs ──────────────────────────────────────────────────────
+
+/// <summary>Her iki cihaza gönderilen Fantasy Board tetikleme payload'ı.</summary>
+public record FantasyBoardTriggeredDto(
+    string BoardId,
+    string BoardPayloadJson,
+    DateTime TriggeredAt
+);
+
+/// <summary>Bir kullanıcı karta oy verdiğinde partnere giden bildirim.</summary>
+public record FantasyVoteDto(
+    string SenderId,
+    string BoardId,
+    string CardId
+);
+
+/// <summary>İki oy aynı kartta buluşunca her iki tarafa giden eşleşme bildirimi.</summary>
+public record FantasyMatchDto(
+    string BoardId,
+    string CardId,
+    DateTime MatchedAt
+);
+

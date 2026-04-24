@@ -21,6 +21,12 @@ public class User
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastSeenAt { get; set; }
 
+    /// <summary>
+    /// Kullanıcı cinsiyeti — FantasyBoard kart seçimi için kullanılır.
+    /// 0 = Belirtilmemiş, 1 = Kadın, 2 = Erkek
+    /// </summary>
+    public int Gender { get; set; } = 0;
+
     // Navigation properties
     public ICollection<Message> SentMessages { get; set; } = [];
     public ICollection<Message> ReceivedMessages { get; set; } = [];

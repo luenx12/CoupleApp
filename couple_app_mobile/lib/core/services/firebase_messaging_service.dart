@@ -17,6 +17,11 @@ class FirebaseMessagingService {
   FirebaseMessagingService._internal();
 
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  Function(RemoteMessage)? _syncCallback;
+
+  void setSyncCallback(Function(RemoteMessage) callback) {
+    _syncCallback = callback;
+  }
 
   Future<void> initialize() async {
     await Firebase.initializeApp();
@@ -32,6 +37,13 @@ class FirebaseMessagingService {
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       _setupLocalNotifications();
       _setupForegroundListener();
+      
+      // Handle app opened from terminated state
+      FirebaseMessaging.instance.getInitialMessage().then((message) {
+        if (message != null && _syncCallback != null) {
+          _syncCallback!(message);
+        }
+      });
     }
   }
 
@@ -73,8 +85,9 @@ class FirebaseMessagingService {
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      // Logic when opening app from a background notification tag
-      // This routes the user normally to the Chat screen in most implementations.
+      if (_syncCallback != null) {
+        _syncCallback!(message);
+      }
     });
   }
 

@@ -59,6 +59,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
+    // Uygulama arka plandan ön plana döndüğünde sunucudan geçmişi yenile.
+    // Böylece uygulama kapalıyken gelen mesajlar görünür olur.
+    if (lifecycle == AppLifecycleState.resumed) {
+      ref.read(chatNotifierProvider.notifier).syncHistory();
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _scrollToBottom());
+    }
+  }
+
   void _onScroll() {
     final atBottom = _scrollCtrl.position.pixels >=
         _scrollCtrl.position.maxScrollExtent - 80;

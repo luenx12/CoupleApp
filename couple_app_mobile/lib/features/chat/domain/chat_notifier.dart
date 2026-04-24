@@ -18,6 +18,7 @@ import '../data/signalr_service.dart';
 import '../domain/fantasy_board_model.dart';
 import '../domain/fantasy_board_notifier.dart';
 import '../domain/message_model.dart';
+import '../../../core/services/firebase_messaging_service.dart';
 
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -124,8 +125,8 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   late final ChatRepository _repo;
   StreamSubscription<NetworkStatus>? _connectivitySub;
-  // Prevents duplicate flush calls
-  bool _flushScheduled = false;
+  bool _flushScheduled = false; // Prevents duplicate flush calls
+  bool _syncing        = false; // Prevents parallel history syncs
 
   Future<void> _init() async {
     if (myId.isEmpty || partnerId.isEmpty) return;
@@ -153,13 +154,16 @@ class ChatNotifier extends StateNotifier<ChatState> {
     // ✅ KEY FIX: flush outbox whenever SignalR successfully connects/reconnects
     signalR.onReconnected = _onSignalRReconnected;
 
+    // ✅ FCM bildirime tıklanınca → sync (arka plan + uygulama kapalı durumu)
+    FirebaseMessagingService().setSyncCallback((_) => syncHistory());
+
     // Load local messages first (instant)
     state = state.copyWith(isLoading: true);
     final local = await _repo.loadLocalMessages();
     state = state.copyWith(messages: local, isLoading: false);
 
     // Sync from server in background
-    _syncHistory();
+    syncHistory();
 
     // ── Connectivity izle (network layer) ───────────────────────────────
     _connectivitySub = ConnectivityService.instance.statusStream.listen(
@@ -215,10 +219,30 @@ class ChatNotifier extends StateNotifier<ChatState> {
     }
   }
 
-  Future<void> _syncHistory() async {
-    final synced = await _repo.fetchAndSyncHistory();
-    if (mounted) {
-      state = state.copyWith(messages: synced);
+  /// Çekilen sunucu geçmişini mevcut state ile MERGE et.
+  /// Pending/yerel mesajlar silinmez — sadece yeni gelen eklenir.
+  Future<void> syncHistory() async {
+    if (_syncing) return;
+    _syncing = true;
+    try {
+      final fromServer = await _repo.fetchAndSyncHistory();
+      if (!mounted) return;
+
+      // Mevcut state'teki pending mesajları koru
+      final existing = state.messages;
+      final serverIds = fromServer.map((m) => m.id).toSet();
+
+      // Sunucudan gelen + henüz server'a ulaşmamış pending mesajlar
+      final merged = [
+        ...fromServer,
+        ...existing.where((m) =>
+            m.sendStatus == SendStatus.pending &&
+            !serverIds.contains(m.id)),
+      ]..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+
+      state = state.copyWith(messages: merged);
+    } finally {
+      _syncing = false;
     }
   }
 

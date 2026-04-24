@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ChatNotifier — Riverpod state management for the chat screen
-// v2: ConnectivityService + Outbox flush bağlantısı
+// v3: HubStatus listener + outbox flush on SignalR reconnect
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import 'dart:async';
@@ -26,6 +26,7 @@ class ChatState {
     this.isSending = false,
     this.isPartnerTyping = false,
     this.isOnline = true,
+    this.hubStatus = HubConnectionStatus.disconnected,
     this.error,
   });
 
@@ -34,7 +35,16 @@ class ChatState {
   final bool isSending;
   final bool isPartnerTyping;
   final bool isOnline;
+  /// Real SignalR hub connection status (more accurate than isOnline)
+  final HubConnectionStatus hubStatus;
   final String? error;
+
+  /// True only when both network is up AND SignalR is connected
+  bool get isFullyOnline =>
+      isOnline && hubStatus == HubConnectionStatus.connected;
+
+  bool get isReconnecting =>
+      hubStatus == HubConnectionStatus.reconnecting;
 
   ChatState copyWith({
     List<MessageModel>? messages,
@@ -42,6 +52,7 @@ class ChatState {
     bool? isSending,
     bool? isPartnerTyping,
     bool? isOnline,
+    HubConnectionStatus? hubStatus,
     String? error,
   }) =>
       ChatState(
@@ -50,6 +61,7 @@ class ChatState {
         isSending:       isSending       ?? this.isSending,
         isPartnerTyping: isPartnerTyping ?? this.isPartnerTyping,
         isOnline:        isOnline        ?? this.isOnline,
+        hubStatus:       hubStatus       ?? this.hubStatus,
         error:           error,
       );
 }
@@ -109,6 +121,8 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   late final ChatRepository _repo;
   StreamSubscription<NetworkStatus>? _connectivitySub;
+  // Prevents duplicate flush calls
+  bool _flushScheduled = false;
 
   Future<void> _init() async {
     if (myId.isEmpty || partnerId.isEmpty) return;
@@ -128,6 +142,9 @@ class ChatNotifier extends StateNotifier<ChatState> {
     signalR.onMessage       = _onIncomingMessage;
     signalR.onPartnerTyping = _onPartnerTyping;
 
+    // ✅ KEY FIX: flush outbox whenever SignalR successfully connects/reconnects
+    signalR.onReconnected = _onSignalRReconnected;
+
     // Load local messages first (instant)
     state = state.copyWith(isLoading: true);
     final local = await _repo.loadLocalMessages();
@@ -136,7 +153,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
     // Sync from server in background
     _syncHistory();
 
-    // ── Connectivity izle ───────────────────────────────────────────────
+    // ── Connectivity izle (network layer) ───────────────────────────────
     _connectivitySub = ConnectivityService.instance.statusStream.listen(
       _onConnectivityChanged,
     );
@@ -145,10 +162,38 @@ class ChatNotifier extends StateNotifier<ChatState> {
     final currentStatus = ConnectivityService.instance.current;
     state = state.copyWith(isOnline: currentStatus == NetworkStatus.online);
 
-    // Eğer zaten online ise bekleyen mesajları flush et
-    if (currentStatus == NetworkStatus.online) {
-      _flushOutbox();
+    // ── HubStatus izle (SignalR layer) ───────────────────────────────────
+    // Watch hubStatusProvider changes to update UI and trigger flush
+    ref.listen<HubConnectionStatus>(hubStatusProvider, (prev, next) {
+      if (!mounted) return;
+      state = state.copyWith(hubStatus: next);
+
+      if (next == HubConnectionStatus.connected && prev != HubConnectionStatus.connected) {
+        // SignalR just connected/reconnected → flush pending messages
+        _triggerFlush();
+      }
+    });
+
+    // Set initial hub status
+    state = state.copyWith(hubStatus: ref.read(hubStatusProvider));
+  }
+
+  /// Called by SignalRService when hub reconnects successfully.
+  void _onSignalRReconnected() {
+    if (!mounted) return;
+    _triggerFlush();
+  }
+
+  /// Debounced flush trigger — prevents multiple concurrent flushes.
+  Future<void> _triggerFlush() async {
+    if (_flushScheduled) return;
+    _flushScheduled = true;
+    // Small delay to let state settle
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (mounted) {
+      await _flushOutbox();
     }
+    _flushScheduled = false;
   }
 
   void _onConnectivityChanged(NetworkStatus status) {
@@ -156,8 +201,9 @@ class ChatNotifier extends StateNotifier<ChatState> {
     final isOnline = status == NetworkStatus.online;
     state = state.copyWith(isOnline: isOnline);
 
-    if (isOnline) {
-      _flushOutbox();
+    if (isOnline && signalR.isConnected) {
+      // Both network and SignalR are up → flush
+      _triggerFlush();
     }
   }
 
@@ -195,8 +241,8 @@ class ChatNotifier extends StateNotifier<ChatState> {
         isSending: false,
       );
 
-      // Eğer online ise hemen flush et
-      if (state.isOnline) _flushOutbox();
+      // Hemen flush: SignalR bağlıysa anında gider, değilse outbox'ta bekler
+      _triggerFlush();
     } catch (e) {
       state = state.copyWith(isSending: false, error: e.toString());
     }
@@ -216,7 +262,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
         messages:  [...state.messages, msg],
         isSending: false,
       );
-      if (state.isOnline) _flushOutbox();
+      _triggerFlush();
     } catch (e) {
       state = state.copyWith(isSending: false, error: e.toString());
     }

@@ -74,8 +74,15 @@ builder.Services.AddAuthorization();
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = builder.Environment.IsDevelopment();
-    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
-    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    // Production-tuned values:
+    // KeepAlive pings the client every 25s to keep WebSocket alive through Nginx
+    options.KeepAliveInterval = TimeSpan.FromSeconds(25);
+    // Client must respond within 60s — gives room for mobile sleep/background
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    // Handshake must complete within 15s (default 15s — explicit for clarity)
+    options.HandshakeTimeout = TimeSpan.FromSeconds(15);
+    // Allow larger payloads for encrypted media messages
+    options.MaximumReceiveMessageSize = 512 * 1024; // 512 KB
 });
 
 // ════════════════════════════════════════════════════════════════════

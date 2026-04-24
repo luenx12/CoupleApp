@@ -1,8 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // SignalRService — Real-time hub connection
+// v3: Robust reconnect + onReconnected callback for outbox flush
 // Handles: messages, typing, location events
 // ═══════════════════════════════════════════════════════════════════════════════
 
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:signalr_netcore/signalr_client.dart';
@@ -24,19 +26,20 @@ final signalRServiceProvider = Provider<SignalRService>((ref) {
 });
 
 // Incoming message callback type
-typedef MessageHandler  = void Function(Map<String, dynamic> dto);
-typedef TypingHandler   = void Function(String senderId, bool isTyping);
-typedef LocationHandler = void Function(Map<String, dynamic> payload);
-typedef WaterSyncHandler = void Function(String senderId, int count);
-typedef VibeHandler = void Function(String senderId, String vibeType);
+typedef MessageHandler    = void Function(Map<String, dynamic> dto);
+typedef TypingHandler     = void Function(String senderId, bool isTyping);
+typedef LocationHandler   = void Function(Map<String, dynamic> payload);
+typedef WaterSyncHandler  = void Function(String senderId, int count);
+typedef VibeHandler       = void Function(String senderId, String vibeType);
+typedef ReconnectedHandler = void Function();
 
-typedef WhoIsMoreHandler = void Function(String senderId, String questionId, String answer);
-typedef FlameLevelHandler = void Function(String senderId, double level);
-typedef RedRoomMediaHandler = void Function(String senderId, String mediaId, int timeoutSeconds);
+typedef WhoIsMoreHandler      = void Function(String senderId, String questionId, String answer);
+typedef FlameLevelHandler     = void Function(String senderId, double level);
+typedef RedRoomMediaHandler   = void Function(String senderId, String mediaId, int timeoutSeconds);
 
 // Wordle handlers
 typedef WordleChallengeHandler = void Function(String senderId, String encryptedWord);
-typedef WordleResultHandler = void Function(String senderId, int attempts, bool isDaily);
+typedef WordleResultHandler    = void Function(String senderId, int attempts, bool isDaily);
 
 // DrawGame handlers
 typedef DrawStrokeHandler      = void Function(Map<String, dynamic> dto);
@@ -62,20 +65,32 @@ class SignalRService {
   HubConnection? _hub;
   bool _disposed = false;
 
-  // Callbacks registered by ChatNotifier / LocationNotifier
-  MessageHandler?  onMessage;
-  TypingHandler?   onPartnerTyping;
-  LocationHandler? onLocationRequested;
-  LocationHandler? onLocationShared;
-  LocationHandler? onLocationDenied;
+  // Stored token for manual retry
+  String _lastToken = '';
 
-  WaterSyncHandler? onWaterSynced;
-  VibeHandler? onVibeReceived;
-  WhoIsMoreHandler? onWhoIsMoreAnswered;
+  // Retry state for manual reconnect loop
+  int _manualRetryCount = 0;
+  static const _manualRetryDelays = [5000, 15000, 30000, 60000];
+  Timer? _retryTimer;
+
+  // Callbacks registered by ChatNotifier / LocationNotifier
+  MessageHandler?     onMessage;
+  TypingHandler?      onPartnerTyping;
+  LocationHandler?    onLocationRequested;
+  LocationHandler?    onLocationShared;
+  LocationHandler?    onLocationDenied;
+
+  /// Called when SignalR successfully reconnects (after a drop).
+  /// ChatNotifier uses this to trigger outbox flush.
+  ReconnectedHandler? onReconnected;
+
+  WaterSyncHandler?  onWaterSynced;
+  VibeHandler?       onVibeReceived;
+  WhoIsMoreHandler?  onWhoIsMoreAnswered;
   FlameLevelHandler? onFlameLevelChanged;
   RedRoomMediaHandler? onRedRoomMediaReceived;
   WordleChallengeHandler? onWordleChallengeReceived;
-  WordleResultHandler? onWordleResultReceived;
+  WordleResultHandler?    onWordleResultReceived;
   
   // DrawGame Callbacks
   DrawStrokeHandler?      onDrawStrokeReceived;
@@ -94,17 +109,24 @@ class SignalRService {
   SpotlightMovedHandler? onSpotlightMoved;
   HeatmapUpdatedHandler? onHeatmapUpdated;
 
+  // ── Current connection status (publicly readable) ─────────────────────
+  HubConnectionStatus get status =>
+      _ref.read(hubStatusProvider);
+
+  bool get isConnected =>
+      _hub?.state == HubConnectionState.Connected;
+
   // ── Connect ───────────────────────────────────────────────────────────────
 
   Future<void> connect(String accessToken) async {
-    if (_hub != null &&
-        _hub!.state == HubConnectionState.Connected) return;
+    if (_disposed) return;
+    if (_hub != null && _hub!.state == HubConnectionState.Connected) return;
+
+    _lastToken = accessToken;
 
     // If hub already exists but not connected, stop it first
     if (_hub != null) {
-      try {
-        await _hub!.stop();
-      } catch (_) {}
+      try { await _hub!.stop(); } catch (_) {}
       _hub = null;
     }
 
@@ -137,13 +159,23 @@ class SignalRService {
       .build();
 
     _hub!.onclose(({error}) {
-      if (!_disposed) _setStatus(HubConnectionStatus.disconnected);
+      if (_disposed) return;
+      _setStatus(HubConnectionStatus.disconnected);
+      // Automatic reconnect exhausted all delays → start manual retry loop
+      _startManualRetryLoop();
     });
+
     _hub!.onreconnecting(({error}) {
       if (!_disposed) _setStatus(HubConnectionStatus.reconnecting);
     });
+
     _hub!.onreconnected(({connectionId}) {
-      if (!_disposed) _setStatus(HubConnectionStatus.connected);
+      if (_disposed) return;
+      _manualRetryCount = 0;
+      _retryTimer?.cancel();
+      _setStatus(HubConnectionStatus.connected);
+      // ✅ KEY FIX: notify ChatNotifier to flush pending outbox messages
+      onReconnected?.call();
     });
 
     // ── Event Handlers ──────────────────────────────────────────────────
@@ -223,43 +255,43 @@ class SignalRService {
     _hub!.on('WhoIsMoreAnswered', (args) {
       if (args == null || args.isEmpty) return;
       final raw = args[0] as Map?;
-      final senderId = raw?['senderId']?.toString() ?? '';
+      final senderId   = raw?['senderId']?.toString() ?? '';
       final questionId = raw?['questionId']?.toString() ?? '';
-      final answer = raw?['answer']?.toString() ?? '';
+      final answer     = raw?['answer']?.toString() ?? '';
       onWhoIsMoreAnswered?.call(senderId, questionId, answer);
     });
 
     _hub!.on('FlameLevelChanged', (args) {
       if (args == null || args.isEmpty) return;
-      final raw = args[0] as Map?;
+      final raw      = args[0] as Map?;
       final senderId = raw?['senderId']?.toString() ?? '';
-      final level = (raw?['level'] as num?)?.toDouble() ?? 0.0;
+      final level    = (raw?['level'] as num?)?.toDouble() ?? 0.0;
       onFlameLevelChanged?.call(senderId, level);
     });
 
     _hub!.on('RedRoomMediaReceived', (args) {
       if (args == null || args.isEmpty) return;
-      final raw = args[0] as Map?;
-      final senderId = raw?['senderId']?.toString() ?? '';
-      final mediaId = raw?['mediaId']?.toString() ?? '';
+      final raw            = args[0] as Map?;
+      final senderId       = raw?['senderId']?.toString() ?? '';
+      final mediaId        = raw?['mediaId']?.toString() ?? '';
       final timeoutSeconds = raw?['timeoutSeconds'] as int? ?? 10;
       onRedRoomMediaReceived?.call(senderId, mediaId, timeoutSeconds);
     });
     
     _hub!.on('WordleChallengeReceived', (args) {
       if (args == null || args.isEmpty) return;
-      final raw = args[0] as Map?;
+      final raw      = args[0] as Map?;
       final senderId = raw?['senderId']?.toString() ?? '';
-      final word = raw?['encryptedWord']?.toString() ?? '';
+      final word     = raw?['encryptedWord']?.toString() ?? '';
       onWordleChallengeReceived?.call(senderId, word);
     });
 
     _hub!.on('WordleResultReceived', (args) {
       if (args == null || args.isEmpty) return;
-      final raw = args[0] as Map?;
+      final raw      = args[0] as Map?;
       final senderId = raw?['senderId']?.toString() ?? '';
       final attempts = raw?['attempts'] as int? ?? 0;
-      final isDaily = raw?['isDaily'] as bool? ?? true;
+      final isDaily  = raw?['isDaily'] as bool? ?? true;
       onWordleResultReceived?.call(senderId, attempts, isDaily);
     });
     
@@ -306,8 +338,8 @@ class SignalRService {
 
     _hub!.on('RedMatch', (args) {
       if (args == null || args.isEmpty) return;
-      final raw      = args[0] as Map?;
-      final itemId   = raw?['itemId']?.toString() ?? '';
+      final raw       = args[0] as Map?;
+      final itemId    = raw?['itemId']?.toString() ?? '';
       final matchedAt = DateTime.tryParse(raw?['matchedAt']?.toString() ?? '') ?? DateTime.now();
       onRedMatch?.call(itemId, matchedAt);
     });
@@ -368,11 +400,38 @@ class SignalRService {
 
     try {
       await _hub!.start();
+      _manualRetryCount = 0;
+      _retryTimer?.cancel();
       _setStatus(HubConnectionStatus.connected);
+      // Connected fresh (not reconnect) → also notify to flush outbox
+      onReconnected?.call();
     } catch (e) {
       _setStatus(HubConnectionStatus.disconnected);
-      _scheduleRetry(accessToken);
+      _startManualRetryLoop();
     }
+  }
+
+  // ── Manual retry loop (runs after automatic reconnect gives up) ───────────
+
+  void _startManualRetryLoop() {
+    if (_disposed) return;
+    _retryTimer?.cancel();
+
+    final delayMs = _manualRetryCount < _manualRetryDelays.length
+        ? _manualRetryDelays[_manualRetryCount]
+        : _manualRetryDelays.last; // stay at max delay
+
+    _manualRetryCount++;
+
+    // ignore: avoid_print
+    print('[SignalR] Manual retry #$_manualRetryCount in ${delayMs}ms...');
+
+    _retryTimer = Timer(Duration(milliseconds: delayMs), () {
+      if (!_disposed) {
+        _hub = null;
+        connect(_lastToken);
+      }
+    });
   }
 
   // ── Send Methods ──────────────────────────────────────────────────────────
@@ -514,6 +573,7 @@ class SignalRService {
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   Future<void> disconnect() async {
+    _retryTimer?.cancel();
     await _hub?.stop();
     _hub = null;
     _setStatus(HubConnectionStatus.disconnected);
@@ -521,18 +581,10 @@ class SignalRService {
 
   void dispose() {
     _disposed = true;
+    _retryTimer?.cancel();
     _hub?.stop();
   }
 
   void _setStatus(HubConnectionStatus s) =>
       _ref.read(hubStatusProvider.notifier).state = s;
-
-  void _scheduleRetry(String token) {
-    Future.delayed(const Duration(seconds: 5), () {
-      if (!_disposed && _hub?.state != HubConnectionState.Connected) {
-        _hub = null;
-        connect(token);
-      }
-    });
-  }
 }

@@ -28,6 +28,13 @@ class _SpicyTruthDareWidgetState extends ConsumerState<SpicyTruthDareWidget> {
     "Kamerayı vücudunda yavaşça gezdirerek partnerine bir 'tur' yaptır. 😉",
     "Partnerine en seksi fısıltınla bir ses kaydı gönder. 🎤",
     "Ayna karşısında partnerinle paylaştığın en sevdiğin anıyı canlandır.",
+    "Partnerinin en sevdiğin yerini öperken 5 saniyelik bir video çek. 😘",
+    "Masturbasyon yaparken partnerine bir video gönder. 🍆",
+    "Partnerine en seksi fısıltınla bir ses kaydı gönder. 🎤",
+    "Ayna karşısında partnerinle paylaştığın en sevdiğin anıyı canlandır.",
+    "Parmağına sakso çek 10 saniye ",
+    
+    
   ];
 
   void _generateNew() {

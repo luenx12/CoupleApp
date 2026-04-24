@@ -15,5 +15,17 @@ class AppConfig {
   static String get hubUrl  => '$baseUrl/hubs/couple';
   static String get apiUrl  => '$baseUrl/api';
 
-  static const List<int> reconnectDelaysMs = [0, 2000, 5000, 10000, 30000];
+  /// SignalR automatic reconnect delays (ms).
+  /// Pattern: immediate → 3s → 7s → 15s → 30s → 60s → 60s (repeating)
+  /// More attempts = better resilience for mobile background/sleep scenarios.
+  static const List<int> reconnectDelaysMs = [
+    0,      // 1st attempt: immediate
+    3000,   // 2nd: 3 seconds
+    7000,   // 3rd: 7 seconds
+    15000,  // 4th: 15 seconds
+    30000,  // 5th: 30 seconds
+    60000,  // 6th: 1 minute
+    60000,  // 7th+: keep trying every 1 minute
+  ];
 }
+

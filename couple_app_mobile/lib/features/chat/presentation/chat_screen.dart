@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ChatScreen — iMessage-style encrypted messaging UI
+// v3: Connection status indicator
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import 'dart:async';
@@ -11,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../../location/domain/location_notifier.dart';
+import '../data/signalr_service.dart';
 import '../domain/chat_notifier.dart';
 import '../domain/message_model.dart';
 import 'message_bubble.dart';
@@ -191,6 +193,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
     });
 
+    final hubStatus = ref.watch(hubStatusProvider);
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
@@ -201,8 +205,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               // ── AppBar ───────────────────────────────────────────────────
               _ChatAppBar(
                 partnerName: partner,
+                hubStatus:   hubStatus,
                 onLocationTap: _requestLocation,
               ),
+              // ── Connection status banner ──────────────────────────────────
+              _ConnectionBanner(hubStatus: hubStatus),
               // ── Messages ─────────────────────────────────────────────────
               Expanded(
                 child: Stack(
@@ -279,12 +286,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 // ── AppBar ────────────────────────────────────────────────────────────────────
 
 class _ChatAppBar extends StatelessWidget {
-  const _ChatAppBar({required this.partnerName, required this.onLocationTap});
+  const _ChatAppBar({
+    required this.partnerName,
+    required this.hubStatus,
+    required this.onLocationTap,
+  });
   final String partnerName;
+  final HubConnectionStatus hubStatus;
   final VoidCallback onLocationTap;
 
   @override
   Widget build(BuildContext context) {
+    // Online indicator dot color based on hub status
+    final (dotColor, dotTooltip) = switch (hubStatus) {
+      HubConnectionStatus.connected    => (AppColors.success, 'Bağlı'),
+      HubConnectionStatus.reconnecting => (Colors.amber,      'Yeniden bağlanıyor…'),
+      HubConnectionStatus.connecting   => (Colors.amber,      'Bağlanıyor…'),
+      _                                => (Colors.redAccent,  'Bağlantı yok'),
+    };
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
@@ -295,24 +315,44 @@ class _ChatAppBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Avatar
-          Container(
-            width: 40,
-            height: 40,
-            decoration: const BoxDecoration(
-              gradient: AppTheme.primaryGradient,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                partnerName.isNotEmpty ? partnerName[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
+          // Avatar with online dot
+          Stack(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    partnerName.isNotEmpty ? partnerName[0].toUpperCase() : '?',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                    ),
+                  ),
                 ),
               ),
-            ),
+              // Status dot
+              Positioned(
+                right: 0, bottom: 0,
+                child: Tooltip(
+                  message: dotTooltip,
+                  child: Container(
+                    width: 11,
+                    height: 11,
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.card, width: 2),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -354,6 +394,71 @@ class _ChatAppBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Connection Banner ─────────────────────────────────────────────────────────
+
+class _ConnectionBanner extends StatelessWidget {
+  const _ConnectionBanner({required this.hubStatus});
+  final HubConnectionStatus hubStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    if (hubStatus == HubConnectionStatus.connected) {
+      return const SizedBox.shrink(); // no banner when connected
+    }
+
+    final (bgColor, icon, text) = switch (hubStatus) {
+      HubConnectionStatus.reconnecting ||
+      HubConnectionStatus.connecting   => (
+          Colors.amber.shade800,
+          Icons.sync_rounded,
+          'Yeniden bağlanıyor… Mesajlarınız gönderilecek.',
+        ),
+      _ => (
+          Colors.red.shade800,
+          Icons.wifi_off_rounded,
+          'Bağlantı yok — Mesajlar bağlantı gelince gönderilecek.',
+        ),
+    };
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        color: bgColor.withAlpha(220),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hubStatus == HubConnectionStatus.reconnecting ||
+                hubStatus == HubConnectionStatus.connecting)
+              const SizedBox(
+                width: 12, height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: Colors.white,
+                ),
+              )
+            else
+              Icon(icon, size: 14, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ).animate().fadeIn(duration: 200.ms),
     );
   }
 }

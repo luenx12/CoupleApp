@@ -164,8 +164,7 @@ class _CardArea extends StatelessWidget {
 
   // Horizontal padding inside the container
   static const _hPad = 12.0;
-  static const _cardH = 168.0;
-  static const _stackH = _cardH + _kAvatarSize + _kAvatarSize + 16;
+  // cardH is now dynamic — removed fixed height
 
   double _cardWidth() {
     final available = totalWidth - _hPad * 2 - _kCardGap * 2;
@@ -181,9 +180,6 @@ class _CardArea extends StatelessWidget {
   // Convert centerX to left for a circle of size _kAvatarSize
   double _toLeft(double centerX) => centerX - _kAvatarSize / 2;
 
-  // Avatar Y: myAvatar at bottom, partnerAvatar at top
-  double get _myAvatarY    => _stackH - _kAvatarSize;
-  double get _partAvatarY  => 0;
 
   // Neutral position (center of stack, no vote)
   double get _neutralLeft => totalWidth / 2 - _kAvatarSize / 2;
@@ -204,64 +200,71 @@ class _CardArea extends StatelessWidget {
   Widget build(BuildContext context) {
     final cw = _cardWidth();
 
-    return SizedBox(
-      height: _stackH,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // ── Cards row ────────────────────────────────────────────────────
-          Positioned(
-            top: _kAvatarSize + 4,
-            left: _hPad,
-            right: _hPad,
-            child: Row(
-              children: [
-                for (int i = 0; i < payload.cards.length; i++) ...[
-                  if (i > 0) const SizedBox(width: _kCardGap),
-                  SizedBox(
-                    width: cw,
-                    height: _cardH,
-                    child: _FantasyCardWidget(
-                      card:       payload.cards[i],
-                      boardState: boardState,
-                      boardId:    boardId,
-                      ref:        ref,
-                    ),
+    return Column(
+      children: [
+        // ── Partner avatar row (top) ──────────────────────────────────────
+        SizedBox(
+          height: _kAvatarSize,
+          child: Stack(
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 500),
+                curve: Curves.easeOutCubic,
+                top: 0,
+                left: _partLeft(),
+                child: _AvatarChip(
+                  initial: pInitial,
+                  color:   const Color(0xFFE8405A),
+                  label:   'O',
+                  hasVoted: boardState.partnerVoteCardId != null,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        // ── Cards row ────────────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: _hPad),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (int i = 0; i < payload.cards.length; i++) ...[
+                if (i > 0) const SizedBox(width: _kCardGap),
+                Expanded(
+                  child: _FantasyCardWidget(
+                    card:       payload.cards[i],
+                    boardState: boardState,
+                    boardId:    boardId,
+                    ref:        ref,
                   ),
-                ],
+                ),
               ],
-            ),
+            ],
           ),
-
-          // ── Partner avatar (top) ──────────────────────────────────────────
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOutCubic,
-            top:  _partAvatarY,
-            left: _partLeft(),
-            child: _AvatarChip(
-              initial: pInitial,
-              color:   const Color(0xFFE8405A),
-              label:   'O',
-              hasVoted: boardState.partnerVoteCardId != null,
-            ),
+        ),
+        const SizedBox(height: 4),
+        // ── My avatar row (bottom) ───────────────────────────────────────
+        SizedBox(
+          height: _kAvatarSize,
+          child: Stack(
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 500),
+                curve: Curves.easeOutCubic,
+                top: 0,
+                left: _myLeft(),
+                child: _AvatarChip(
+                  initial: myInitial,
+                  color:   const Color(0xFF3A86FF),
+                  label:   'Ben',
+                  hasVoted: boardState.myVoteCardId != null,
+                ),
+              ),
+            ],
           ),
-
-          // ── My avatar (bottom) ────────────────────────────────────────────
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOutCubic,
-            top:  _myAvatarY,
-            left: _myLeft(),
-            child: _AvatarChip(
-              initial: myInitial,
-              color:   const Color(0xFF3A86FF),
-              label:   'Ben',
-              hasVoted: boardState.myVoteCardId != null,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -302,6 +305,7 @@ class _FantasyCardWidget extends StatelessWidget {
   Widget _buildCard(BuildContext context) {
     final base = AnimatedContainer(
       duration: const Duration(milliseconds: 300),
+      constraints: const BoxConstraints(minHeight: 120),
       decoration: BoxDecoration(
         color: _isMatched
             ? const Color(0xFF1F1800)
@@ -361,20 +365,16 @@ class _FantasyCardWidget extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Task text
-                Expanded(
-                  child: Text(
-                    card.taskText,
-                    style: TextStyle(
-                      color: _isOtherLocked
-                          ? Colors.white.withAlpha(60)
-                          : Colors.white.withAlpha(210),
-                      fontSize: 11,
-                      height: 1.4,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 5,
-                    overflow: TextOverflow.ellipsis,
+                // Task text — dynamic height, fully visible
+                Text(
+                  card.taskText,
+                  style: TextStyle(
+                    color: _isOtherLocked
+                        ? Colors.white.withAlpha(60)
+                        : Colors.white.withAlpha(210),
+                    fontSize: 10,
+                    height: 1.35,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 // Vote indicators

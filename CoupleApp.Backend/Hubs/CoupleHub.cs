@@ -91,6 +91,7 @@ public class CoupleHub : Hub
         // 3. Persist (ciphertext only — Zero-Leak principle)
         var message = new Message
         {
+            Id = dto.Id ?? Guid.NewGuid(),
             SenderId = senderId,
             ReceiverId = dto.ReceiverId,
             EncryptedText = dto.EncryptedText,
@@ -885,6 +886,7 @@ public class CoupleHub : Hub
 // ── DTOs (hub-scoped, lightweight) ────────────────────────────────────────
 
 public record SendMessageDto(
+    Guid? Id,
     Guid ReceiverId,
     string EncryptedText,
     string? EncryptedTextForSender,

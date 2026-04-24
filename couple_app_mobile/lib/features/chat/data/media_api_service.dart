@@ -1,12 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// MediaApiService — Encrypted media upload + self-destruct DELETE
+// MediaApiService v2 — Encrypted media upload / download / self-destruct
 //
-// POST  /api/Media/upload        → şifreli blob yükle, mediaId al
-// GET   /api/Media/{mediaId}     → şifreli blob indir (RAM'de çözülecek)
-// DELETE /api/Media/{mediaId}    → Self-Destruct: sunucudan kalıcı sil
+// POST   /api/Media/upload    → şifreli blob yükle → mediaId
+// GET    /api/Media/{id}      → şifreli blob indir  (Dio, 30s timeout, retry×3)
+// DELETE /api/Media/{id}      → Self-Destruct 🔥
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -16,21 +17,20 @@ class MediaApiService {
   MediaApiService([this._initialToken]);
 
   final String? _initialToken;
+  static const _maxRetries = 3;
 
   String get _base => AppConfig.baseUrl;
 
-  Future<Map<String, String>> get _authHeaders async {
+  Future<String> get _token async {
     const storage = FlutterSecureStorage();
-    final token = await storage.read(key: 'access_token') ?? _initialToken;
-    return {
-      'Authorization': 'Bearer $token',
-    };
+    return await storage.read(key: 'access_token') ?? _initialToken ?? '';
   }
 
-  // ── Upload (multipart) ───────────────────────────────────────────────────
+  Future<Map<String, String>> get _authHeaders async =>
+      {'Authorization': 'Bearer ${await _token}'};
 
-  /// [encryptedBytes] → zaten şifreli .aes bytes
-  /// Döner: mediaId (String)
+  // ── Upload (multipart / http paketi) ────────────────────────────────────────
+
   Future<String> uploadEncryptedMedia({
     required Uint8List encryptedBytes,
     required String messageId,
@@ -46,8 +46,8 @@ class MediaApiService {
             filename: '$messageId.aes',
           ));
 
-    final streamed  = await request.send();
-    final response  = await http.Response.fromStream(streamed);
+    final streamed = await request.send().timeout(const Duration(seconds: 60));
+    final response = await http.Response.fromStream(streamed);
 
     if (response.statusCode != 200) {
       throw Exception('Media upload failed: ${response.statusCode} ${response.body}');
@@ -57,28 +57,50 @@ class MediaApiService {
     return data['mediaId'] as String;
   }
 
-  // ── Download (stream → bytes) ────────────────────────────────────────────
+  // ── Download (Dio, 30s timeout, retry×3, stream → bytes) ────────────────────
 
   Future<Uint8List> downloadEncryptedMedia(String mediaId) async {
-    final uri      = Uri.parse('$_base/api/Media/$mediaId');
-    final response = await http.get(uri, headers: await _authHeaders);
+    final tok = await _token;
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {'Authorization': 'Bearer $tok'},
+    ));
 
-    if (response.statusCode == 200) return response.bodyBytes;
-    throw Exception('Media download failed: ${response.statusCode}');
+    for (int attempt = 0; attempt < _maxRetries; attempt++) {
+      try {
+        final response = await dio.get<List<int>>(
+          '$_base/api/Media/$mediaId',
+          options: Options(responseType: ResponseType.bytes),
+        );
+
+        if (response.statusCode == 200 && response.data != null) {
+          return Uint8List.fromList(response.data!);
+        }
+        throw Exception('Media download failed: ${response.statusCode}');
+      } on DioException catch (e) {
+        final isLast = attempt == _maxRetries - 1;
+        if (isLast) rethrow;
+        // Exponential backoff: 1s, 2s
+        await Future.delayed(Duration(seconds: 1 << attempt));
+        final _ = e;
+      }
+    }
+
+    throw Exception('Media download failed after $_maxRetries attempts');
   }
 
-  // ── Self-Destruct DELETE ─────────────────────────────────────────────────
+  // ── Self-Destruct DELETE ─────────────────────────────────────────────────────
 
-  /// Gösterildikten sonra sunucudan kalıcı sil — self-destruct 🔥
   Future<void> selfDestruct(String mediaId) async {
     final uri      = Uri.parse('$_base/api/Media/$mediaId');
-    final response = await http.delete(uri, headers: await _authHeaders);
+    final response = await http.delete(uri, headers: await _authHeaders)
+        .timeout(const Duration(seconds: 10));
 
-    if (response.statusCode != 204 && response.statusCode != 200) {
-      // Idempotent — zaten silinmişse hata fırlatma
-      if (response.statusCode != 404) {
-        throw Exception('Self-destruct failed: ${response.statusCode}');
-      }
+    if (response.statusCode != 204 &&
+        response.statusCode != 200 &&
+        response.statusCode != 404) {
+      throw Exception('Self-destruct failed: ${response.statusCode}');
     }
   }
 }

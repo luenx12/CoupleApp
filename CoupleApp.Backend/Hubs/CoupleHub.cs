@@ -169,9 +169,30 @@ public class CoupleHub : Hub
     {
         var requesterId = GetUserId();
         var connections = _connectionManager.GetConnections(partnerId);
+
         if (connections.Count > 0)
+        {
+            // Partner online — real-time SignalR
             await Clients.Clients(connections)
                          .SendAsync("LocationRequested", new { RequesterId = requesterId });
+        }
+        else
+        {
+            // Partner offline — FCM push with data payload so Flutter can show approval dialog on open
+            var deviceTokens = await _users.GetDeviceTokensAsync(partnerId);
+            if (deviceTokens.Count > 0)
+            {
+                await _firebase.SendPushNotificationAsync(
+                    deviceTokens,
+                    title: "📍 Konum İsteği",
+                    body: "Partnerin konumunu görmek istiyor. Paylaşmak ister misin?",
+                    data: new Dictionary<string, string>
+                    {
+                        ["type"]        = "location_request",
+                        ["requesterId"] = requesterId.ToString()
+                    });
+            }
+        }
 
         _logger.LogInformation("User {RequesterId} requested location from {PartnerId}", requesterId, partnerId);
     }

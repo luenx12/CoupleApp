@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/services/connectivity_service.dart';
+import 'core/services/firebase_messaging_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/domain/auth_notifier.dart';
 import 'features/auth/domain/auth_state.dart';
@@ -14,7 +15,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Ağ bağlantısı izlemeyi başlat (offline-first outbox queue)
   await ConnectivityService.instance.init();
-  await FantasyBoardPayload.loadTasks(); // Load fantasy tasks JSON
+  // Fantasy görevlerini yükle
+  await FantasyBoardPayload.loadTasks();
+  // Firebase'i erken başlat — background handler kayıt olabilsin
+  // (auth'dan önce gelir; token kaydı auth akışında ayrıca yapılır)
+  await FirebaseMessagingService().initialize();
   runApp(const ProviderScope(child: CoupleApp()));
 }
 

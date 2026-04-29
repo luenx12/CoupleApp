@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CoupleApp.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6765c4aee77fa9ded37c34a0001d10ad1bc785e3")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c12ef2a4590a076f7081865f866dc9c5ac343ce3")]
 [assembly: System.Reflection.AssemblyProductAttribute("CoupleApp.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CoupleApp.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

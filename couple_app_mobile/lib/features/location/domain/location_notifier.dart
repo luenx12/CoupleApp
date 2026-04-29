@@ -113,6 +113,19 @@ class LocationNotifier extends StateNotifier<LocationState> {
     state = const LocationState();
   }
 
+  /// FCM data push üzerinden gelen konum isteğini işler.
+  /// Uygulama kapalıyken gelen `location_request` bildirimi açılışta
+  /// FirebaseMessagingService tarafından buraya yönlendirilir.
+  void handleFcmLocationRequest(String requesterId) {
+    if (!mounted) return;
+    if (requesterId.isEmpty) return;
+    state = state.copyWith(
+      status:      LocationFlowStatus.waitingApproval,
+      requesterId: requesterId,
+    );
+  }
+
+
   // ── Partner konum paylaşmayı onayladı ────────────────────────────────────
 
   Future<void> approveRequest() async {

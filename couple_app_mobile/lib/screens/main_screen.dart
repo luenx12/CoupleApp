@@ -1,9 +1,24 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// MainScreen — Ana ekran + WhatsApp tarzı lifecycle yönetimi
+//
+// WhatsApp mantığı:
+//  1. Eager init: ChatNotifier + LocationNotifier uygulama açılır açılmaz başlar,
+//     kullanıcı tab değiştirmeden önce de mesajları + konum isteklerini dinler.
+//  2. WidgetsBindingObserver: Uygulama arka plandan öne gelince syncHistory()
+//     + SignalR bağlantısını yenile. Böylece arka planda kaçırılan mesajlar
+//     anında gösterilir.
+//  3. FCM callback'leri burada wire-up edilir: location_request diyaloğu,
+//     chat sync, tab yönlendirmesi.
+// ═══════════════════════════════════════════════════════════════════════════════
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/services/firebase_messaging_service.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/domain/auth_notifier.dart';
 import '../features/chat/data/signalr_service.dart';
+import '../features/chat/domain/chat_notifier.dart';
 import '../features/chat/presentation/chat_screen.dart';
 import '../features/location/presentation/location_map_screen.dart';
 import '../features/location/domain/location_notifier.dart';
@@ -23,26 +38,111 @@ class MainScreen extends ConsumerStatefulWidget {
   ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends ConsumerState<MainScreen> {
+class _MainScreenState extends ConsumerState<MainScreen>
+    with WidgetsBindingObserver {          // ← lifecycle observer
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initServices());
+    WidgetsBinding.instance
+      ..addObserver(this)
+      ..addPostFrameCallback((_) => _initServices());
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // ── App lifecycle ───────────────────────────────────────────────────────────
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (state == AppLifecycleState.resumed) {
+      _onAppResumed();
+    }
+  }
+
+  /// Uygulama arka plandan öne geldiğinde:
+  /// 1. SignalR bağlantısını yenile (kopmuşsa)
+  /// 2. Chat geçmişini sunucudan sync et (kaçırılan mesajlar)
+  void _onAppResumed() {
+    // SignalR yeniden bağlan (bağlıysa no-op)
+    final token = ref.read(authNotifierProvider).accessToken;
+    if (token != null) {
+      ref.read(signalRServiceProvider).connect(token);
+    }
+
+    // Chat sync — WhatsApp gibi: arka planda kaçırılan mesajları çek
+    ref.read(chatNotifierProvider.notifier).syncHistory();
+  }
+
+  // ── Servis başlatma ─────────────────────────────────────────────────────────
+
   Future<void> _initServices() async {
-    // 1. Connect SignalR first
+    // 1. SignalR bağlantısı
     final token = ref.read(authNotifierProvider).accessToken;
     if (token != null) {
       await ref.read(signalRServiceProvider).connect(token);
     }
 
-    // 2. Initialize GamesNotifier AFTER SignalR is connected so its
-    //    callback registrations wire up to a live hub instance.
-    //    This ensures RedRoom media notifications work even when the
-    //    user hasn't navigated to the Games tab yet.
+    // 2. Eager init: ChatNotifier (SignalR callback'leri kaydeder, mesaj dinler)
+    //    Chat sekmesi açılmadan önce de ReceiveMessage eventi yakalanır.
+    ref.read(chatNotifierProvider);
+
+    // 3. Eager init: LocationNotifier (SignalR + FCM konum callback'leri)
+    //    Harita sekmesine gitmeden de LocationRequested eventi yakalanır.
+    ref.read(locationNotifierProvider);
+
+    // 4. GamesNotifier (RedRoom medya bildirimleri için)
     ref.read(gamesNotifierProvider);
+
+    // 5. FCM callback'lerini wire-up et
+    _wireFcmCallbacks();
   }
+
+  void _wireFcmCallbacks() {
+    final fcm = FirebaseMessagingService();
+
+    // Chat sync callback — her FCM geldiğinde
+    fcm.setMessageSyncCallback((_) {
+      if (mounted) {
+        ref.read(chatNotifierProvider.notifier).syncHistory();
+      }
+    });
+
+    // Konum isteği callback — FCM'den location_request gelince
+    fcm.setLocationRequestCallback((requesterId) {
+      if (!mounted) return;
+      // LocationNotifier'a bildir → waitingApproval state
+      ref.read(locationNotifierProvider.notifier)
+          .handleFcmLocationRequest(requesterId);
+      // Harita sekmesine yönlendir (index 2)
+      ref.read(activeTabProvider.notifier).state = 2;
+    });
+
+    // Bildirime tıklanınca tab yönlendirmesi
+    fcm.setNotificationTapCallback((type, payload) {
+      if (!mounted) return;
+      switch (type) {
+        case 'location_request':
+          ref.read(activeTabProvider.notifier).state = 2; // Harita
+          if (payload != null && payload.isNotEmpty) {
+            ref.read(locationNotifierProvider.notifier)
+                .handleFcmLocationRequest(payload);
+          }
+        case 'message':
+          ref.read(activeTabProvider.notifier).state = 1; // Chat
+        default:
+          break;
+      }
+    });
+  }
+
+  // ── Sayfalar ────────────────────────────────────────────────────────────────
 
   static const _pages = [
     _VibePage(),
@@ -72,13 +172,13 @@ class _MainScreenState extends ConsumerState<MainScreen> {
               ),
             ),
           ),
-          
+
           // Lottie Overlay for Vibes
           if (vibeState.currentVibe != null)
             Positioned.fill(
               child: IgnorePointer(
                 child: Lottie.network(
-                  'https://lottie.host/e2ccda68-da7d-47be-bba2-cc84a44d8b94/I0QjVzQdM2.json', // Sample Love Heart explosion URL
+                  'https://lottie.host/e2ccda68-da7d-47be-bba2-cc84a44d8b94/I0QjVzQdM2.json',
                   fit: BoxFit.cover,
                   repeat: false,
                   onLoaded: (composition) {
@@ -95,7 +195,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     );
   }
 }
-
 
 // ── Top Bar ────────────────────────────────────────────────────────────────
 class _TopBar extends StatelessWidget {
@@ -219,18 +318,21 @@ class _BottomNav extends ConsumerWidget {
   }
 }
 
-// ── Placeholder Pages ──────────────────────────────────────────────────────
+// ── Sayfa widget'ları ──────────────────────────────────────────────────────
+
+/// Chat sayfası — eager init sayesinde ChatNotifier zaten başlamış olacak.
 class _ChatPage extends StatelessWidget {
   const _ChatPage();
   @override
   Widget build(BuildContext context) => const ChatScreen();
 }
 
+/// Harita sayfası — eager init sayesinde LocationNotifier zaten başlamış olacak.
+/// locationNotifierProvider burada tekrar watch edilmesi redundant ama zararsız.
 class _MapPage extends ConsumerWidget {
   const _MapPage();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Initialize location notifier (registers SignalR callbacks)
     ref.watch(locationNotifierProvider);
     return const LocationMapScreen();
   }
@@ -253,5 +355,3 @@ class _GamesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const GamesScreen();
 }
-
-// End of Main Screen pages

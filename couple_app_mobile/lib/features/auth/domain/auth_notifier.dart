@@ -264,7 +264,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       print("🚀 FCM: Token alma işlemi başlıyor...");
       final fcmService = FirebaseMessagingService();
-      await fcmService.initialize(); // İzinler burada mı isteniyor kontrol et!
+      // initialize() artık main() içinde bir kez çağrılıyor;
+      // burada sadece token alıp backend'e kaydediyoruz.
 
       final deviceToken = await fcmService.getToken();
       print("✅ FCM: Google'dan alınan cihaz tokenı: $deviceToken");
@@ -283,7 +284,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             "❌ FCM: Google cihaz token'ını NULL döndürdü! (İzin verilmemiş olabilir)");
       }
 
-      // Background listener
+      // Token yenilenince backend'i güncelle
       fcmService.onTokenRefresh.listen((newToken) async {
         try {
           print("🔄 FCM: Token yenilendi: $newToken");
@@ -295,15 +296,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
         }
       });
     } on DioException catch (e) {
-      // Backend'den dönen hataları burada yakalayacağız!
       print(
           "❌ FCM DİKKAT: Backend isteği patladı! Status: ${e.response?.statusCode}");
       print("❌ FCM DİKKAT: Hata Detayı: ${e.response?.data}");
     } catch (e) {
-      // Firebase veya başka bir kod hatası
       print("❌ FCM DİKKAT: Beklenmeyen bir hata oluştu: $e");
     }
   }
+
 
   Future<void> _fetchPartner(String? token) async {
     if (token == null) return;

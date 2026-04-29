@@ -11,6 +11,11 @@
     <!-- Location (geolocator) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- FCM: Android 13+ bildirim izni -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- FCM: Cihaz yeniden başlayınca background handler hazır olsun -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
 
     <application
         android:label="CoupleNT"

@@ -155,7 +155,9 @@ class ChatNotifier extends StateNotifier<ChatState> {
     signalR.onReconnected = _onSignalRReconnected;
 
     // ✅ FCM bildirime tıklanınca → sync (arka plan + uygulama kapalı durumu)
-    FirebaseMessagingService().setSyncCallback((_) => syncHistory());
+    // Not: Ana callback main_screen.dart _wireFcmCallbacks() içinde de kurulur.
+    // ChatNotifier kendi sync callback'ini de kaydeder (defense in depth).
+    FirebaseMessagingService().setMessageSyncCallback((_) => syncHistory());
 
     // Load local messages first (instant)
     state = state.copyWith(isLoading: true);

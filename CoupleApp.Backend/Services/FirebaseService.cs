@@ -6,7 +6,12 @@ namespace CoupleApp.Backend.Services;
 
 public interface IFirebaseService
 {
-    Task SendPushNotificationAsync(List<string> tokens, string title, string body);
+    /// <param name="data">Optional key-value pairs included as FCM data payload (e.g. type, requesterId).</param>
+    Task SendPushNotificationAsync(
+        List<string> tokens,
+        string title,
+        string body,
+        Dictionary<string, string>? data = null);
 }
 
 public class FirebaseService : IFirebaseService
@@ -54,7 +59,11 @@ public class FirebaseService : IFirebaseService
         }
     }
 
-    public async Task SendPushNotificationAsync(List<string> tokens, string title, string body)
+    public async Task SendPushNotificationAsync(
+        List<string> tokens,
+        string title,
+        string body,
+        Dictionary<string, string>? data = null)
     {
         if (tokens == null || tokens.Count == 0) return;
         if (FirebaseApp.DefaultInstance == null) 
@@ -71,6 +80,8 @@ public class FirebaseService : IFirebaseService
                 Title = title,
                 Body = body
             },
+            // Data payload — delivered even in background; Flutter reads message.data
+            Data = data ?? new Dictionary<string, string>(),
             Android = new AndroidConfig
             {
                 Priority = Priority.High
@@ -80,7 +91,8 @@ public class FirebaseService : IFirebaseService
                 Headers = new Dictionary<string, string> { { "apns-priority", "10" } },
                 Aps = new Aps
                 {
-                    Sound = "default"
+                    Sound = "default",
+                    ContentAvailable = true   // Wakes iOS in background
                 }
             }
         };
